@@ -1,0 +1,32 @@
+{
+  "dependencies": {
+    "@create-figma-plugin/ui": "^4.0.3",
+    "@create-figma-plugin/utilities": "^4.0.3",
+    "preact": ">=10"
+  },
+  "devDependencies": {
+    "@create-figma-plugin/build": "^4.0.3",
+    "@create-figma-plugin/tsconfig": "^4.0.3",
+    "@figma/plugin-typings": "1.109.0",
+    "typescript": ">=5"
+  },
+  "scripts": {
+    "build": "build-figma-plugin --typecheck --minify",
+    "watch": "build-figma-plugin --typecheck --watch"
+  },
+  "figma-plugin": {
+    "editorType": [
+      "figma"
+    ],
+    "id": "1642215897646749039",
+    "documentAccess": "dynamic-page",
+    "name": "Screen Spec MD",
+    "main": "src/main.ts",
+    "ui": "src/ui.tsx",
+    "networkAccess": {
+      "allowedDomains": [
+        "none"
+      ]
+    }
+  }
+}

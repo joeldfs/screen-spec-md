@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    background: #F6F6F4;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #18181B;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: center;
+    gap: 96px;
+    padding: 0 132px;
+  }
+  .left { width: 880px; flex: none; }
+  .brand { display: flex; align-items: center; gap: 22px; margin-bottom: 64px; }
+  .mark {
+    width: 76px; height: 76px; border-radius: 18px; background: #18181B;
+    display: flex; flex-direction: column; align-items: flex-start;
+    justify-content: center; gap: 9px; padding-left: 18px;
+  }
+  .mark i { display: block; height: 6px; border-radius: 3px; background: #FAFAFA; }
+  .mark i:nth-child(1) { width: 30px; }
+  .mark i:nth-child(2) { width: 40px; background: #A1A1AA; }
+  .mark i:nth-child(3) { width: 22px; background: #A1A1AA; }
+  .wordmark { font-size: 34px; font-weight: 650; letter-spacing: -0.01em; }
+  .tagline {
+    font-size: 76px; font-weight: 720; line-height: 1.05;
+    letter-spacing: -0.025em; margin-bottom: 34px;
+  }
+  .tagline .em { color: #4F46E5; }
+  .sub { font-size: 27px; line-height: 1.45; color: #71717A; max-width: 760px; }
+  .chips { margin-top: 56px; display: flex; gap: 14px; }
+  .chip {
+    font-size: 19px; color: #52525B; background: #ECECEA;
+    border: 1px solid #E0E0DD; border-radius: 999px; padding: 9px 18px;
+  }
+
+  .card {
+    flex: 1; align-self: stretch; margin: 150px 0;
+    background: #FFFFFF; border: 1px solid #E6E6E3; border-radius: 22px;
+    box-shadow: 0 30px 70px rgba(24,24,27,0.10), 0 6px 18px rgba(24,24,27,0.05);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 22px 28px; border-bottom: 1px solid #F0F0EE;
+  }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
+  .dot.r { background: #F1B0AB; } .dot.y { background: #F3D9A6; } .dot.g { background: #B9DFC0; }
+  .file { margin-left: 10px; font-size: 20px; color: #A1A1AA;
+          font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .code {
+    padding: 30px 34px; font-size: 20.5px; line-height: 1.72;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: pre; color: #3F3F46;
+  }
+  .h { color: #A1A1AA; }
+  .k { color: #71717A; }
+  .role { color: #4F46E5; }
+  .comp { color: #0E7490; }
+  .str { color: #15803D; }
+  .num { color: #B45309; }
+  .p { color: #C7C7C2; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">
+      <div class="mark"><i></i><i></i><i></i></div>
+      <div class="wordmark">Screen Spec MD</div>
+    </div>
+    <div class="tagline">Hand your coding agent the screen<span class="em">—</span>not&nbsp;just a screenshot.</div>
+    <div class="sub">Turn selected Figma frames into a Markdown spec: what component goes where, with exact text, variants, and design tokens.</div>
+    <div class="chips">
+      <div class="chip">Offline</div>
+      <div class="chip">Deterministic</div>
+      <div class="chip">No network</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="file">screens.md</span>
+    </div>
+<div class="code"><span class="h"># Screen 1 — 1440×1024</span>
+<span class="k">items</span><span class="p">:</span>
+  2<span class="p">: {</span> <span class="k">role</span><span class="p">:</span> <span class="role">heading</span><span class="p">,</span> <span class="k">box</span><span class="p">:</span> <span class="num">[28,22,21,2]</span><span class="p">,</span>
+       <span class="k">text</span><span class="p">:</span> <span class="str">Set lead assignment permission</span> <span class="p">}</span>
+  3<span class="p">: {</span> <span class="k">role</span><span class="p">:</span> <span class="role">avatar</span><span class="p">,</span> <span class="k">box</span><span class="p">:</span> <span class="num">[30,29,3,4]</span><span class="p">,</span> <span class="k">text</span><span class="p">:</span> <span class="str">SJ</span> <span class="p">}</span>
+  5<span class="p">: {</span> <span class="k">component</span><span class="p">:</span> <span class="comp">Button</span><span class="p">,</span> <span class="k">props</span><span class="p">: {</span> <span class="k">Variant</span><span class="p">:</span> <span class="str">Default</span> <span class="p">},</span>
+       <span class="k">text</span><span class="p">:</span> <span class="str">Confirm assignment</span> <span class="p">}</span>
+  6<span class="p">: {</span> <span class="k">role</span><span class="p">:</span> <span class="role">body</span><span class="p">,</span> <span class="k">text</span><span class="p">:</span> <span class="str">sarah.johnson@…</span><span class="p">,</span>
+       <span class="k">color</span><span class="p">:</span> <span class="comp">Text/Tertiary</span> <span class="p">}</span>
+  7<span class="p">: {</span> <span class="k">role</span><span class="p">:</span> <span class="role">body</span><span class="p">,</span> <span class="k">text</span><span class="p">:</span> <span class="str">Read/Edit access to Leads</span><span class="p">,</span>
+       <span class="k">icons</span><span class="p">:</span> <span class="p">[</span><span class="comp">Check</span><span class="p">] }</span></div>
+  </div>
+</body>
+</html>
