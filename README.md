@@ -52,7 +52,8 @@ items:
 
 Output is one combined `screens.md` (a `## Screen N` block per selected frame), shown in a
 copyable preview and downloadable from the UI. A **Colors** toggle (Off / Tokens / Hex) controls
-color extraction.
+color extraction. In Dev Mode, the same Markdown is also available as a plain-text result in the
+Code section.
 
 ## Develop
 
@@ -64,8 +65,10 @@ $ npm run watch      # rebuild on change
 ```
 
 Load it: in the Figma desktop app, run **Import plugin from manifest…** (Quick Actions) and
-pick the generated `manifest.json`. Select one or more frames, run the plugin, pick a color mode
-if you want, and click **Generate**.
+pick the generated `manifest.json`. In design mode, select one or more frames, run the plugin,
+pick a color mode if you want, and click **Generate**. In Dev Mode, open the plugin from the
+Inspect / Plugins panel for the same UI, or select a supported screen container in the Code
+section to get Markdown directly.
 
 Check the formatting offline (no Figma needed) — feeds sample `ScreenData` through the renderer:
 
@@ -75,7 +78,8 @@ $ npx --yes tsx scripts/selftest.ts
 
 ### Source layout
 
-- [`src/main.ts`](src/main.ts) — Figma side: selection → `extractScreen` per frame → emit.
+- [`src/main.ts`](src/main.ts) — Figma side: selection/codegen node → `extractScreen` per frame
+  → emit or return Markdown.
 - [`src/lib/extract.ts`](src/lib/extract.ts) — layer tree → flat `Element[]` with `% boxes`
   (role inference, component/variant/icon capture, chart/table/cards/tabs collapse, icon-label
   pairing, color-token resolution, de-noising).

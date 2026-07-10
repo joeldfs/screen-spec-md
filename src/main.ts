@@ -2,11 +2,25 @@
 import { emit, on, showUI } from '@create-figma-plugin/utilities'
 
 import { extractScreen } from './lib/extract'
-import { ErrorHandler, GenerateHandler, ScreenData, ScreensHandler } from './types'
+import { buildMarkdown } from './lib/outline'
+import {
+  ColorMode,
+  ErrorHandler,
+  GenerateHandler,
+  ScreenData,
+  ScreensHandler
+} from './types'
 
 export default function () {
   // Auto-prune hidden nodes during traversal so they never reach the outline.
   figma.skipInvisibleInstanceChildren = true
+
+  if (figma.mode === 'codegen') {
+    figma.codegen.on('generate', async function (event) {
+      return [await generateCodegenResult(event.node)]
+    })
+    return
+  }
 
   on<GenerateHandler>('GENERATE', async function (colorMode) {
     try {
@@ -21,15 +35,7 @@ export default function () {
       const result: Array<ScreenData> = []
       let index = 1
       for (const node of screens) {
-        const { elements, componentNames, frameWidth, frameHeight } =
-          await extractScreen(node, colorMode)
-        result.push({
-          index: index++,
-          elements,
-          componentNames,
-          frameWidth,
-          frameHeight
-        })
+        result.push(await screenDataFromNode(node, index++, colorMode))
       }
       emit<ScreensHandler>('SCREENS', result)
     } catch (error) {
@@ -41,6 +47,47 @@ export default function () {
   })
 
   showUI({ width: 420, height: 600 })
+}
+
+async function generateCodegenResult(node: SceneNode): Promise<CodegenResult> {
+  if (!isScreen(node)) {
+    return codegenText(
+      'Select a frame, component, component set, instance, or section to generate a Screen Spec MD outline.'
+    )
+  }
+  try {
+    const screen = await screenDataFromNode(node, 1, 'off')
+    return codegenText(buildMarkdown([screen]))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return codegenText(
+      `Screen Spec MD could not generate Markdown.\n\n${message}`
+    )
+  }
+}
+
+function codegenText(code: string): CodegenResult {
+  return {
+    title: 'Screen Spec MD',
+    code,
+    language: 'PLAINTEXT'
+  }
+}
+
+async function screenDataFromNode(
+  node: SceneNode,
+  index: number,
+  colorMode: ColorMode
+): Promise<ScreenData> {
+  const { elements, componentNames, frameWidth, frameHeight } =
+    await extractScreen(node, colorMode)
+  return {
+    index,
+    elements,
+    componentNames,
+    frameWidth,
+    frameHeight
+  }
 }
 
 function isScreen(node: SceneNode): boolean {

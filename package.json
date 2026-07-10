@@ -16,10 +16,21 @@
   },
   "figma-plugin": {
     "editorType": [
-      "figma"
+      "figma",
+      "dev"
     ],
     "id": "1642215897646749039",
     "documentAccess": "dynamic-page",
+    "capabilities": [
+      "inspect",
+      "codegen"
+    ],
+    "codegenLanguages": [
+      {
+        "label": "Markdown",
+        "value": "markdown"
+      }
+    ],
     "name": "Screen Spec MD",
     "main": "src/main.ts",
     "ui": "src/ui.tsx",
