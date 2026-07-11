@@ -79,14 +79,16 @@ async function screenDataFromNode(
   index: number,
   colorMode: ColorMode
 ): Promise<ScreenData> {
-  const { elements, componentNames, frameWidth, frameHeight } =
+  const { elements, frameWidth, frameHeight, layout, padding, overflow } =
     await extractScreen(node, colorMode)
   return {
     index,
     elements,
-    componentNames,
     frameWidth,
-    frameHeight
+    frameHeight,
+    layout,
+    padding,
+    overflow
   }
 }
 

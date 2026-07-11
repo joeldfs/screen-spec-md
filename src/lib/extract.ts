@@ -36,9 +36,11 @@ export async function extractScreen(
   colorMode: ColorMode
 ): Promise<{
   elements: Array<Element>
-  componentNames: Array<string>
   frameWidth: number
   frameHeight: number
+  layout?: Element['layout']
+  padding?: Element['padding']
+  overflow?: Element['overflow']
 }> {
   const instanceNames = await resolveInstanceNames(frame)
   const textStyleRoles = await resolveTextStyleRoles(frame)
@@ -63,24 +65,29 @@ export async function extractScreen(
     colorStyleNames
   }
   const out: Array<Element> = []
-  emitContainer(frame, ctx, 0, out)
+  emitContainer(frame, ctx, 0, out, undefined)
   const cleaned = dropDefaultTextColor(
     dropNestedVisuals(dropChartLabels(mergeIconLabels(out)))
   )
-  const componentNames = Array.from(new Set(instanceNames.values())).sort(
-    (a, b) => a.localeCompare(b)
-  )
   return {
     elements: cleaned,
-    componentNames,
     frameWidth: ctx.frameWidth,
-    frameHeight: ctx.frameHeight
+    frameHeight: ctx.frameHeight,
+    layout: layoutIntent(frame),
+    padding: paddingOf(frame),
+    overflow: overflowOf(frame)
   }
 }
 
 // --- emit ------------------------------------------------------------------
 
-function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): void {
+function emit(
+  node: SceneNode,
+  ctx: Ctx,
+  depth: number,
+  out: Array<Element>,
+  parentSourceNodeId: string | undefined
+): void {
   if (!isVisible(node) || depth > 12) {
     return
   }
@@ -88,7 +95,7 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
     case 'TEXT': {
       const text = styledText(node)
       if (text.length > 0) {
-        out.push({
+        pushElement(out, node, parentSourceNodeId, {
           role: inferTextRole(node, ctx),
           text,
           box: boxOf(node, ctx),
@@ -102,7 +109,7 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
       if (isDecorative(node) || box.w < MIN_SIZE || box.h < MIN_SIZE) {
         return
       }
-      out.push(instanceElement(node, ctx))
+      pushElement(out, node, parentSourceNodeId, instanceElement(node, ctx))
       return
     }
     case 'RECTANGLE':
@@ -114,7 +121,7 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
     case 'LINE': {
       const shape = shapeElement(node, ctx)
       if (shape !== null) {
-        out.push(shape)
+        pushElement(out, node, parentSourceNodeId, shape)
       }
       return
     }
@@ -123,37 +130,37 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
     case 'GROUP':
     case 'SECTION': {
       if ((node.type === 'FRAME' || node.type === 'COMPONENT') && isAvatar(node)) {
-        out.push(avatarElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, avatarElement(node, ctx))
         return
       }
       if ((node.type === 'FRAME' || node.type === 'COMPONENT') && isInput(node)) {
-        out.push(inputElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, inputElement(node, ctx))
         return
       }
       if ((node.type === 'FRAME' || node.type === 'COMPONENT') && isButton(node, ctx)) {
-        out.push(buttonElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, buttonElement(node, ctx))
         return
       }
       // A repeating-row data table collapses to one element (columns + row shape
       // + count) instead of shattering into dozens of cells.
       if (isTabular(node)) {
-        out.push(tableElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, tableElement(node, ctx))
         return
       }
       // A horizontal row of repeating multi-text cards (e.g. KPI cards) collapses
       // to one summary; a filled row of short-text tabs to one `tabs`.
       if (isCardRow(node)) {
-        out.push(cardRowElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, cardRowElement(node, ctx))
         return
       }
       if (isTabRow(node)) {
-        out.push(tabsElement(node, ctx))
+        pushElement(out, node, parentSourceNodeId, tabsElement(node, ctx))
         return
       }
       // A plot/illustration (several shapes + only tiny labels, no instances)
       // collapses to one [chart] instead of shattering into ticks and segments.
       if (isChartLike(node)) {
-        out.push({
+        pushElement(out, node, parentSourceNodeId, {
           role: 'chart',
           box: boxOf(node, ctx),
           rounded: isRoundedShape(node)
@@ -163,7 +170,7 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
       if (!hasContent(node)) {
         const shape = shapeElement(node, ctx)
         if (shape !== null) {
-          out.push(shape)
+          pushElement(out, node, parentSourceNodeId, shape)
         }
         return
       }
@@ -174,9 +181,17 @@ function emit(node: SceneNode, ctx: Ctx, depth: number, out: Array<Element>): vo
       // LLM.
       const layout = groupLayout(node, ctx, depth)
       if (layout !== undefined) {
-        out.push({ role: 'group', box: boxOf(node, ctx), layout })
+        pushElement(out, node, parentSourceNodeId, {
+          role: 'group',
+          box: boxOf(node, ctx),
+          layout,
+          padding: paddingOf(node),
+          overflow: overflowOf(node)
+        })
+        emitContainer(node, ctx, depth, out, node.id)
+        return
       }
-      emitContainer(node, ctx, depth, out)
+      emitContainer(node, ctx, depth, out, parentSourceNodeId)
       return
     }
     default:
@@ -188,7 +203,8 @@ function emitContainer(
   node: SceneNode,
   ctx: Ctx,
   depth: number,
-  out: Array<Element>
+  out: Array<Element>,
+  parentSourceNodeId: string | undefined
 ): void {
   const kids = childrenOf(node).filter(isVisible)
   if (kids.length === 0) {
@@ -198,18 +214,18 @@ function emitContainer(
   const vertical = 'layoutMode' in node && node.layoutMode === 'VERTICAL'
 
   if (horizontal && kids.length > 1) {
-    emitGroup(sortByX(kids), ctx, depth, out)
+    emitGroup(sortByX(kids), ctx, depth, out, parentSourceNodeId)
     return
   }
   if (vertical) {
     for (const kid of kids) {
-      emit(kid, ctx, depth + 1, out)
+      emit(kid, ctx, depth + 1, out, parentSourceNodeId)
     }
     return
   }
   // No / grid layout: reconstruct reading rows from geometry.
   for (const group of groupRows(kids)) {
-    emitGroup(group, ctx, depth, out)
+    emitGroup(group, ctx, depth, out, parentSourceNodeId)
   }
 }
 
@@ -218,16 +234,17 @@ function emitGroup(
   group: Array<SceneNode>,
   ctx: Ctx,
   depth: number,
-  out: Array<Element>
+  out: Array<Element>,
+  parentSourceNodeId: string | undefined
 ): void {
   if (group.length === 1) {
-    emit(group[0], ctx, depth, out)
+    emit(group[0], ctx, depth, out, parentSourceNodeId)
     return
   }
   if (group.every((node) => !hasContent(node))) {
     const merged = mergedVisual(group, ctx)
     if (merged !== null) {
-      out.push(merged)
+      pushElement(out, group[0], parentSourceNodeId, merged)
     }
     return
   }
@@ -261,12 +278,25 @@ function emitGroup(
     if (consumed.has(node.id)) {
       const button = buttonFor.get(node.id)
       if (button !== undefined) {
-        out.push(button)
+        pushElement(out, node, parentSourceNodeId, button)
       }
       continue
     }
-    emit(node, ctx, depth + 1, out)
+    emit(node, ctx, depth + 1, out, parentSourceNodeId)
   }
+}
+
+function pushElement(
+  out: Array<Element>,
+  node: SceneNode,
+  parentSourceNodeId: string | undefined,
+  element: Element
+): void {
+  out.push({
+    ...element,
+    sourceNodeId: node.id,
+    parentSourceNodeId
+  })
 }
 
 // --- element builders ------------------------------------------------------
@@ -1112,6 +1142,10 @@ function isProgress(box: Box, ctx: Ctx): boolean {
 interface AutoLayout {
   layoutMode: 'NONE' | 'HORIZONTAL' | 'VERTICAL'
   itemSpacing: number
+  paddingTop: number
+  paddingRight: number
+  paddingBottom: number
+  paddingLeft: number
   primaryAxisAlignItems: 'MIN' | 'MAX' | 'CENTER' | 'SPACE_BETWEEN'
   counterAxisAlignItems: 'MIN' | 'MAX' | 'CENTER' | 'BASELINE'
   layoutWrap?: 'NO_WRAP' | 'WRAP'
@@ -1139,6 +1173,17 @@ function groupLayout(
   if (box.w >= ctx.frameWidth * 0.95 && box.h >= ctx.frameHeight * 0.95) {
     return undefined
   }
+  return layoutIntent(node)
+}
+
+function layoutIntent(node: SceneNode): Element['layout'] | undefined {
+  if (!('layoutMode' in node)) {
+    return undefined
+  }
+  const al = node as unknown as AutoLayout
+  if (al.layoutMode !== 'HORIZONTAL' && al.layoutMode !== 'VERTICAL') {
+    return undefined
+  }
   const justify = PRIMARY_ALIGN[al.primaryAxisAlignItems]
   const layout: Element['layout'] = {
     dir: al.layoutMode === 'HORIZONTAL' ? 'row' : 'col'
@@ -1158,6 +1203,34 @@ function groupLayout(
     layout.wrap = true
   }
   return layout
+}
+
+function paddingOf(node: SceneNode): Element['padding'] | undefined {
+  if (!('layoutMode' in node)) {
+    return undefined
+  }
+  const al = node as unknown as AutoLayout
+  if (al.layoutMode !== 'HORIZONTAL' && al.layoutMode !== 'VERTICAL') {
+    return undefined
+  }
+  const top = Math.round(al.paddingTop)
+  const right = Math.round(al.paddingRight)
+  const bottom = Math.round(al.paddingBottom)
+  const left = Math.round(al.paddingLeft)
+  if (top === 0 && right === 0 && bottom === 0 && left === 0) {
+    return undefined
+  }
+  if (top === right && right === bottom && bottom === left) {
+    return top
+  }
+  if (top === bottom && right === left) {
+    return [top, right]
+  }
+  return [top, right, bottom, left]
+}
+
+function overflowOf(node: SceneNode): Element['overflow'] | undefined {
+  return 'clipsContent' in node && node.clipsContent ? 'clip' : undefined
 }
 
 // 'start' is the default and left implicit to keep the legend terse.
@@ -1660,15 +1733,34 @@ function groupRows(nodes: ReadonlyArray<SceneNode>): Array<Array<SceneNode>> {
 }
 
 async function resolveInstanceNames(root: SceneNode): Promise<Map<string, string>> {
-  const instances: Array<InstanceNode> = []
+  const instances = new Map<string, InstanceNode>()
+  const collectIconInstances = (node: SceneNode, depth: number): void => {
+    if (depth > 4) {
+      return
+    }
+    for (const child of childrenOf(node)) {
+      if (!isVisible(child)) {
+        continue
+      }
+      if (child.type === 'INSTANCE') {
+        if (isIconSized(child)) {
+          instances.set(child.id, child)
+        }
+        continue
+      }
+      collectIconInstances(child, depth + 1)
+    }
+  }
   const walk = (node: SceneNode, depth: number): void => {
     if (!isVisible(node) || depth > 8) {
       return
     }
     if (node.type === 'INSTANCE') {
-      instances.push(node)
-      // Keep descending so nested instances (e.g. icons inside a card) are
-      // named too — they feed the composed-contents summary.
+      instances.set(node.id, node)
+      // The emitted component is a boundary. Only icon-sized nested instances
+      // need names for the compact icons summary.
+      collectIconInstances(node, 0)
+      return
     }
     for (const child of childrenOf(node)) {
       walk(child, depth + 1)
@@ -1676,16 +1768,15 @@ async function resolveInstanceNames(root: SceneNode): Promise<Map<string, string
   }
   walk(root, 0)
 
-  const map = new Map<string, string>()
-  for (const instance of instances) {
+  const resolved = await Promise.all(Array.from(instances.values()).map(async (instance) => {
     const main = await instance.getMainComponentAsync()
     let name = main === null ? instance.name : main.name
     if (main !== null && main.parent !== null && main.parent.type === 'COMPONENT_SET') {
       name = main.parent.name
     }
-    map.set(instance.id, cleanText(name))
-  }
-  return map
+    return [instance.id, cleanText(name)] as const
+  }))
+  return new Map(resolved)
 }
 
 // Resolve every bound text-style id under the frame to a role (once, up front).

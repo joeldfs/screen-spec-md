@@ -58,6 +58,11 @@ export interface Element {
     align?: string
     wrap?: boolean
   }
+  // Non-zero container inset, compacted as all / vertical-horizontal /
+  // top-right-bottom-left. Values are observed Figma pixels; token mapping is a
+  // downstream codebase concern unless Figma exposes a bound variable.
+  padding?: number | [number, number] | [number, number, number, number]
+  overflow?: 'clip'
   // Collapsed data-table summary: column headers, the row shape (what each cell
   // renders, left-to-right), and the visible row count. Set only for `table`.
   columns?: Array<string>
@@ -66,15 +71,21 @@ export interface Element {
   count?: number
   box?: Box
   rounded?: boolean
-  children?: Array<Element>
+  // Output-only ownership references. Internal source ids are stripped by the
+  // Markdown formatter after stable numeric ids have been assigned.
+  children?: Array<number>
+  sourceNodeId?: string
+  parentSourceNodeId?: string
 }
 
 export interface ScreenData {
   index: number
   elements: Array<Element>
-  componentNames: Array<string>
   frameWidth: number
   frameHeight: number
+  layout?: Element['layout']
+  padding?: Element['padding']
+  overflow?: Element['overflow']
 }
 
 // How to surface colors: omit them (default), prefer design-token names (bound
