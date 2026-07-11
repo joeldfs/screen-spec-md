@@ -20,3 +20,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx --yes tsx scripts/selftest.ts > /dev/null
+      - run: npx --yes tsx scripts/ui-state-selftest.ts

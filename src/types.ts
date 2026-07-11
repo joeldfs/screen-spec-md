@@ -97,6 +97,43 @@ export interface GenerateHandler extends EventHandler {
   handler: (colorMode: ColorMode) => void
 }
 
+export interface UiReadyHandler extends EventHandler {
+  name: 'UI_READY'
+  handler: () => void
+}
+
+export interface ResizeHandler extends EventHandler {
+  name: 'RESIZE'
+  handler: (size: { width: number; height: number }) => void
+}
+
+export interface SelectionSummary {
+  frames: Array<{
+    id: string
+    name: string
+    type: 'FRAME' | 'SECTION'
+    width: number
+    height: number
+  }>
+  ignoredCount: number
+}
+
+export interface SelectionHandler extends EventHandler {
+  name: 'SELECTION'
+  handler: (selection: SelectionSummary) => void
+}
+
+export interface ExtractionProgress {
+  current: number
+  total: number
+  frameName: string
+}
+
+export interface ProgressHandler extends EventHandler {
+  name: 'PROGRESS'
+  handler: (progress: ExtractionProgress) => void
+}
+
 export interface ScreensHandler extends EventHandler {
   name: 'SCREENS'
   handler: (screens: Array<ScreenData>) => void
