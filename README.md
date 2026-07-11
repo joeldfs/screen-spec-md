@@ -58,6 +58,7 @@ Code section.
 ## Develop
 
 Built with [Create Figma Plugin](https://yuanqing.github.io/create-figma-plugin/).
+Use Node.js 22–24.
 
 ```
 $ npm run build      # generates manifest.json + build/
@@ -88,3 +89,8 @@ $ npx --yes tsx scripts/selftest.ts
 - [`src/ui.tsx`](src/ui.tsx) — UI: color toggle → Generate → preview + `screens.md` download.
 - [`src/types.ts`](src/types.ts) — shared `Role` / `ColorMode` / `Element` / `Box` / `ScreenData`
   types.
+
+## Contributing and license
+
+Contributions are welcome—please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull
+request. This project is released under the [MIT License](LICENSE).

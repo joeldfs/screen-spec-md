@@ -1,4 +1,20 @@
 {
+  "name": "screen-spec-md",
+  "version": "0.1.0",
+  "description": "Generate compact Markdown screen specifications from Figma frames.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeldfs/screen-spec-md.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joeldfs/screen-spec-md/issues"
+  },
+  "homepage": "https://github.com/joeldfs/screen-spec-md#readme",
+  "engines": {
+    "node": ">=22 <26",
+    "npm": ">=10"
+  },
   "dependencies": {
     "@create-figma-plugin/ui": "^4.0.3",
     "@create-figma-plugin/utilities": "^4.0.3",
