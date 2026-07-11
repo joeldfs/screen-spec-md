@@ -2,5 +2,6 @@
 *.log
 *.css.d.ts
 /build/
+/.qa/
 /manifest.json
 node_modules/

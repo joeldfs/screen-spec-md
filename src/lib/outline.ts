@@ -1,5 +1,12 @@
 import { Box, Element, Role, ScreenData } from '../types'
 
+const INTERPRETATION_GUIDE =
+  '> AI interpretation: Implement these screens with the codebase\'s existing ' +
+  'components and tokens. `box` is `[x, y, w, h]` in screen percentages; ' +
+  'gaps and padding are Figma pixels; `children` defines ownership. Treat ' +
+  'component entries as reusable boundaries, preserve text and props exactly, ' +
+  'and use any supplied screenshot for visual details.'
+
 // One block per screen: a YAML list of the screen's elements in reading order.
 // Each item says WHAT it is (role / component name, variant props, exact text,
 // composed icons, layout intent) and WHERE it sits — box: [x, y, w, h] as % of
@@ -8,12 +15,13 @@ import { Box, Element, Role, ScreenData } from '../types'
 // (component identity, variants, exact copy). Generic "Screen N" headings;
 // frame/layer names are never emitted.
 export function buildMarkdown(screens: Array<ScreenData>): string {
-  return screens.map(formatScreen).join('\n\n') + '\n'
+  return INTERPRETATION_GUIDE + '\n\n' + screens.map(formatScreen).join('\n\n') + '\n'
 }
 
 function formatScreen(screen: ScreenData): string {
   // Number every placed element in reading order so an item has a stable ref.
-  const elements = assignIds(screen.elements).filter(
+  const assigned = assignIds(screen.elements)
+  const elements = assigned.elements.filter(
     (element) => element.id !== undefined
   )
   const width = Math.round(screen.frameWidth)
@@ -23,8 +31,21 @@ function formatScreen(screen: ScreenData): string {
     '',
     '```yaml',
     '# box: [x, y, w, h] in % of frame',
-    'items:'
+    'screen:'
   ]
+  if (screen.layout !== undefined) {
+    lines.push(`  layout: ${yamlScalar(layoutString(screen.layout))}`)
+  }
+  if (screen.padding !== undefined) {
+    lines.push(`  padding: ${paddingString(screen.padding)}`)
+  }
+  if (screen.overflow !== undefined) {
+    lines.push(`  overflow: ${screen.overflow}`)
+  }
+  if (assigned.rootChildren.length > 0) {
+    lines.push(`  children: [${assigned.rootChildren.join(', ')}]`)
+  }
+  lines.push('items:')
   for (const element of elements) {
     lines.push(itemLine(element, screen.frameWidth, screen.frameHeight))
   }
@@ -32,11 +53,47 @@ function formatScreen(screen: ScreenData): string {
   return lines.join('\n')
 }
 
-function assignIds(elements: Array<Element>): Array<Element> {
+function assignIds(elements: Array<Element>): {
+  elements: Array<Element>
+  rootChildren: Array<number>
+} {
   let next = 1
-  return elements.map((element) =>
+  const placed = elements.map((element) =>
     element.box !== undefined ? { ...element, id: next++ } : element
   )
+  const idsBySource = new Map<string, number>()
+  for (const element of placed) {
+    if (element.sourceNodeId !== undefined && element.id !== undefined) {
+      idsBySource.set(element.sourceNodeId, element.id)
+    }
+  }
+  const childIds = new Map<string, Array<number>>()
+  const rootChildren: Array<number> = []
+  for (const element of placed) {
+    if (element.id === undefined) {
+      continue
+    }
+    const parentId =
+      element.parentSourceNodeId === undefined
+        ? undefined
+        : idsBySource.get(element.parentSourceNodeId)
+    if (parentId === undefined) {
+      rootChildren.push(element.id)
+      continue
+    }
+    const children = childIds.get(element.parentSourceNodeId!) ?? []
+    children.push(element.id)
+    childIds.set(element.parentSourceNodeId!, children)
+  }
+  return {
+    elements: placed.map((element) => {
+      const { sourceNodeId, parentSourceNodeId, ...output } = element
+      const children =
+        sourceNodeId === undefined ? undefined : childIds.get(sourceNodeId)
+      return children === undefined ? output : { ...output, children }
+    }),
+    rootChildren
+  }
 }
 
 function itemLine(
@@ -63,6 +120,15 @@ function itemLine(
   }
   if (element.layout !== undefined) {
     parts.push(`layout: ${yamlScalar(layoutString(element.layout))}`)
+  }
+  if (element.padding !== undefined) {
+    parts.push(`padding: ${paddingString(element.padding)}`)
+  }
+  if (element.overflow !== undefined) {
+    parts.push(`overflow: ${element.overflow}`)
+  }
+  if (element.children !== undefined && element.children.length > 0) {
+    parts.push(`children: [${element.children.join(', ')}]`)
   }
   if (element.columns !== undefined && element.columns.length > 0) {
     parts.push(`columns: [${element.columns.map(yamlScalar).join(', ')}]`)
@@ -128,6 +194,10 @@ function layoutString(layout: NonNullable<Element['layout']>): string {
     bits.push('wrap')
   }
   return bits.join(' ')
+}
+
+function paddingString(padding: NonNullable<Element['padding']>): string {
+  return Array.isArray(padding) ? `[${padding.join(', ')}]` : String(padding)
 }
 
 // Bare scalar when it's safe; otherwise a double-quoted, escaped string. Text

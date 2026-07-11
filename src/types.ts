@@ -58,6 +58,11 @@ export interface Element {
     align?: string
     wrap?: boolean
   }
+  // Non-zero container inset, compacted as all / vertical-horizontal /
+  // top-right-bottom-left. Values are observed Figma pixels; token mapping is a
+  // downstream codebase concern unless Figma exposes a bound variable.
+  padding?: number | [number, number] | [number, number, number, number]
+  overflow?: 'clip'
   // Collapsed data-table summary: column headers, the row shape (what each cell
   // renders, left-to-right), and the visible row count. Set only for `table`.
   columns?: Array<string>
@@ -66,15 +71,21 @@ export interface Element {
   count?: number
   box?: Box
   rounded?: boolean
-  children?: Array<Element>
+  // Output-only ownership references. Internal source ids are stripped by the
+  // Markdown formatter after stable numeric ids have been assigned.
+  children?: Array<number>
+  sourceNodeId?: string
+  parentSourceNodeId?: string
 }
 
 export interface ScreenData {
   index: number
   elements: Array<Element>
-  componentNames: Array<string>
   frameWidth: number
   frameHeight: number
+  layout?: Element['layout']
+  padding?: Element['padding']
+  overflow?: Element['overflow']
 }
 
 // How to surface colors: omit them (default), prefer design-token names (bound
@@ -84,6 +95,43 @@ export type ColorMode = 'off' | 'tokens' | 'hex'
 export interface GenerateHandler extends EventHandler {
   name: 'GENERATE'
   handler: (colorMode: ColorMode) => void
+}
+
+export interface UiReadyHandler extends EventHandler {
+  name: 'UI_READY'
+  handler: () => void
+}
+
+export interface ResizeHandler extends EventHandler {
+  name: 'RESIZE'
+  handler: (size: { width: number; height: number }) => void
+}
+
+export interface SelectionSummary {
+  frames: Array<{
+    id: string
+    name: string
+    type: 'FRAME' | 'SECTION'
+    width: number
+    height: number
+  }>
+  ignoredCount: number
+}
+
+export interface SelectionHandler extends EventHandler {
+  name: 'SELECTION'
+  handler: (selection: SelectionSummary) => void
+}
+
+export interface ExtractionProgress {
+  current: number
+  total: number
+  frameName: string
+}
+
+export interface ProgressHandler extends EventHandler {
+  name: 'PROGRESS'
+  handler: (progress: ExtractionProgress) => void
 }
 
 export interface ScreensHandler extends EventHandler {

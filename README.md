@@ -66,8 +66,8 @@ $ npm run watch      # rebuild on change
 ```
 
 Load it: in the Figma desktop app, run **Import plugin from manifest…** (Quick Actions) and
-pick the generated `manifest.json`. In design mode, select one or more frames, run the plugin,
-pick a color mode if you want, and click **Generate**. In Dev Mode, open the plugin from the
+pick the generated `manifest.json`. In design mode, select one or more frames or sections, run the
+plugin, pick a color mode if you want, and click **Create screens.md**. In Dev Mode, open it from the
 Inspect / Plugins panel for the same UI, or select a supported screen container in the Code
 section to get Markdown directly.
 

@@ -8,7 +8,9 @@ const tempo: ScreenData = {
   index: 1,
   frameWidth: 390,
   frameHeight: 844,
-  componentNames: [],
+  layout: { dir: 'col', gap: 24 },
+  padding: [20, 24],
+  overflow: 'clip',
   elements: [
     { role: 'caption', text: '9:41', box: { x: 24, y: 20, w: 44, h: 20 } },
     { role: 'caption', text: 'Tempo', box: { x: 300, y: 20, w: 64, h: 20 } },
@@ -27,17 +29,20 @@ const tempo: ScreenData = {
     },
     {
       role: 'group',
+      sourceNodeId: 'footer-actions',
       box: { x: 24, y: 744, w: 354, h: 92 },
       layout: { dir: 'row', gap: 12, justify: 'between', align: 'center' }
     },
     {
       role: 'button-secondary',
+      parentSourceNodeId: 'footer-actions',
       text: 'Back',
       box: { x: 40, y: 760, w: 110, h: 64 },
       rounded: true
     },
     {
       role: 'button-primary',
+      parentSourceNodeId: 'footer-actions',
       text: 'Start with one habit',
       box: { x: 170, y: 760, w: 200, h: 64 }
     }
@@ -49,7 +54,6 @@ const list: ScreenData = {
   index: 2,
   frameWidth: 390,
   frameHeight: 600,
-  componentNames: ['Button', 'HabitCard'],
   elements: [
     { role: 'heading', text: 'Today', box: { x: 24, y: 40, w: 160, h: 40 } },
     {
@@ -83,7 +87,6 @@ const dense: ScreenData = {
   index: 3,
   frameWidth: 1000,
   frameHeight: 800,
-  componentNames: [],
   elements: [
     {
       role: 'badge',

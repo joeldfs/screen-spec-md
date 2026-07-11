@@ -3,12 +3,17 @@ import { emit, on, showUI } from '@create-figma-plugin/utilities'
 
 import { extractScreen } from './lib/extract'
 import { buildMarkdown } from './lib/outline'
+import { isSupportedSelectionType } from './lib/ui-state'
 import {
   ColorMode,
   ErrorHandler,
+  ProgressHandler,
   GenerateHandler,
+  ResizeHandler,
+  SelectionHandler,
   ScreenData,
-  ScreensHandler
+  ScreensHandler,
+  UiReadyHandler
 } from './types'
 
 export default function () {
@@ -22,19 +27,45 @@ export default function () {
     return
   }
 
+  const sendSelection = function (): void {
+    const selection = figma.currentPage.selection
+    const frames = selection.filter(isUiScreen).map((node) => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      width: node.width,
+      height: node.height
+    }))
+    emit<SelectionHandler>('SELECTION', {
+      frames,
+      ignoredCount: selection.length - frames.length
+    })
+  }
+
+  on<UiReadyHandler>('UI_READY', sendSelection)
+  on<ResizeHandler>('RESIZE', function ({ width, height }) {
+    figma.ui.resize(width, height)
+  })
+  figma.on('selectionchange', sendSelection)
+
   on<GenerateHandler>('GENERATE', async function (colorMode) {
     try {
-      const screens = figma.currentPage.selection.filter(isScreen)
+      const screens = [...figma.currentPage.selection.filter(isUiScreen)]
       if (screens.length === 0) {
         emit<ErrorHandler>(
           'ERROR',
-          'Select one or more frames on the canvas, then click Generate.'
+          'Select one or more frames or sections on the canvas.'
         )
         return
       }
       const result: Array<ScreenData> = []
       let index = 1
       for (const node of screens) {
+        emit<ProgressHandler>('PROGRESS', {
+          current: index,
+          total: screens.length,
+          frameName: node.name
+        })
         result.push(await screenDataFromNode(node, index++, colorMode))
       }
       emit<ScreensHandler>('SCREENS', result)
@@ -46,7 +77,7 @@ export default function () {
     }
   })
 
-  showUI({ width: 420, height: 600 })
+  showUI({ width: 400, height: 340 })
 }
 
 async function generateCodegenResult(node: SceneNode): Promise<CodegenResult> {
@@ -79,14 +110,16 @@ async function screenDataFromNode(
   index: number,
   colorMode: ColorMode
 ): Promise<ScreenData> {
-  const { elements, componentNames, frameWidth, frameHeight } =
+  const { elements, frameWidth, frameHeight, layout, padding, overflow } =
     await extractScreen(node, colorMode)
   return {
     index,
     elements,
-    componentNames,
     frameWidth,
-    frameHeight
+    frameHeight,
+    layout,
+    padding,
+    overflow
   }
 }
 
@@ -98,4 +131,8 @@ function isScreen(node: SceneNode): boolean {
     node.type === 'INSTANCE' ||
     node.type === 'SECTION'
   )
+}
+
+function isUiScreen(node: SceneNode): node is FrameNode | SectionNode {
+  return isSupportedSelectionType(node.type)
 }
