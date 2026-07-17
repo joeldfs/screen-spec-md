@@ -5,6 +5,10 @@ where every UI element carries its role (or repo component name), its position, 
 variant props, icons, and optionally color — for pasting into an LLM coding agent **alongside a
 screenshot**.
 
+[![Screen Spec MD turns selected Figma frames into Markdown screen specs](assets/cover.png)](https://www.figma.com/community/plugin/1642215897646749039/screen-spec-md)
+
+**[Get Screen Spec MD on Figma Community →](https://www.figma.com/community/plugin/1642215897646749039/screen-spec-md)**
+
 The idea: hand your coding agent the screenshot for the *picture*, and this spec for everything
 pixels can't show — *which* component goes *where*, its variant, the exact copy, the layout
 intent, and (optionally) the design token behind a color. The two together let an agent compose
