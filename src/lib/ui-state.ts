@@ -121,21 +121,23 @@ export function isSupportedSelectionType(type: string): boolean {
 
 export function getUiSize(view: UiViewState, selection: SelectionSummary): UiSize {
   if (view === 'result') {
-    return { width: 420, height: 560 }
+    return { width: 440, height: 580 }
   }
   if (view === 'empty' || view === 'extracting') {
-    return { width: 400, height: 340 }
+    return { width: 400, height: 348 }
   }
 
+  // Sized to the content so the bottom-pinned call to action never leaves a
+  // void: 214 covers the heading, options and button, plus 32 per listed frame.
+  // Overflow and ignored counts share one footer row, so they cost 26 once.
   const visibleRows = Math.min(selection.frames.length, 3)
-  const ignoredHeight = selection.ignoredCount > 0 ? 16 : 0
-  const overflowHeight = selection.frames.length > 3 ? 16 : 0
+  const hasNote = selection.ignoredCount > 0 || selection.frames.length > 3
   const readyHeight = Math.max(
-    340,
-    Math.min(410, 270 + visibleRows * 26 + ignoredHeight + overflowHeight)
+    268,
+    Math.min(440, 214 + visibleRows * 32 + (hasNote ? 26 : 0))
   )
   if (view === 'error') {
-    return { width: 400, height: Math.min(470, readyHeight + 32) }
+    return { width: 400, height: Math.min(500, readyHeight + 62) }
   }
   return { width: 400, height: readyHeight }
 }
