@@ -54,11 +54,11 @@ const latestSelection: SelectionSummary = {
   ignoredCount: 0
 }
 
-assert.deepEqual(getUiSize('empty', initialUiModel.selection), { width: 400, height: 340 })
-assert.deepEqual(getUiSize('extracting', mixedSelection), { width: 400, height: 340 })
-assert.deepEqual(getUiSize('result', mixedSelection), { width: 420, height: 560 })
-assert.deepEqual(getUiSize('ready', mixedSelection), { width: 400, height: 340 })
-assert.deepEqual(getUiSize('error', mixedSelection), { width: 400, height: 372 })
+assert.deepEqual(getUiSize('empty', initialUiModel.selection), { width: 400, height: 348 })
+assert.deepEqual(getUiSize('extracting', mixedSelection), { width: 400, height: 348 })
+assert.deepEqual(getUiSize('result', mixedSelection), { width: 440, height: 580 })
+assert.deepEqual(getUiSize('ready', mixedSelection), { width: 400, height: 272 })
+assert.deepEqual(getUiSize('error', mixedSelection), { width: 400, height: 334 })
 
 const threeFramesWithIgnored: SelectionSummary = {
   frames: [
@@ -68,8 +68,19 @@ const threeFramesWithIgnored: SelectionSummary = {
   ],
   ignoredCount: 1
 }
-assert.deepEqual(getUiSize('ready', threeFramesWithIgnored), { width: 400, height: 364 })
-assert.deepEqual(getUiSize('error', threeFramesWithIgnored), { width: 400, height: 396 })
+assert.deepEqual(getUiSize('ready', threeFramesWithIgnored), { width: 400, height: 336 })
+assert.deepEqual(getUiSize('error', threeFramesWithIgnored), { width: 400, height: 398 })
+
+// Overflow and ignored counts collapse into a single footer row, so a selection
+// with both is no taller than one with either.
+const overflowingSelection: SelectionSummary = {
+  frames: [
+    ...threeFramesWithIgnored.frames,
+    { id: '4', name: 'Settings', type: 'FRAME', width: 1440, height: 1024 }
+  ],
+  ignoredCount: 2
+}
+assert.deepEqual(getUiSize('ready', overflowingSelection), { width: 400, height: 336 })
 
 let model = reduceUiModel(initialUiModel, { type: 'selection', selection: mixedSelection })
 assert.equal(model.view, 'ready')

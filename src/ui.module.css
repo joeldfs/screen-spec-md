@@ -15,16 +15,42 @@
   background: var(--figma-color-bg, #ffffff);
   color: var(--figma-color-text, #1e1e1e);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 :global(button:focus-visible),
 :global([tabindex]:focus-visible) {
-  outline: 2px solid #5b50e8;
+  outline: 2px solid var(--accent, #6c5cff);
   outline-offset: 2px;
 }
 
 .app {
-  --accent: #5b50e8;
+  /* Brand — the violet used by the plugin illustrations. */
+  --accent: #6c5cff;
+  --accent-hover: #5b4be6;
+  --accent-active: #4f3fd6;
+  --accent-on: #ffffff;
+  --accent-soft: rgba(108, 92, 255, 0.1);
+  --accent-glow: rgba(108, 92, 255, 0.35);
+
+  /* The code surface stays dark in both themes: it reads as an editor. */
+  --code-bg: #17171a;
+  --code-bg-alt: #1d1d21;
+  --code-border: #2c2c33;
+  --code-line: #55555f;
+  --code-text: #dcdce4;
+  --code-heading: #a394ff;
+  --code-key: #7cc4ff;
+  --code-comment: #6d6d78;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 460ms;
+
   display: flex;
   width: 100%;
   height: 100%;
@@ -34,6 +60,15 @@
   color: var(--figma-color-text, #1e1e1e);
 }
 
+:global(html.figma-dark) .app {
+  --accent: #8a7bff;
+  --accent-hover: #9a8dff;
+  --accent-active: #7b6bf5;
+  --accent-on: #14121f;
+  --accent-soft: rgba(138, 123, 255, 0.16);
+  --accent-glow: rgba(138, 123, 255, 0.3);
+}
+
 .main {
   display: flex;
   min-width: 0;
@@ -41,6 +76,14 @@
   flex: 1 1 auto;
   padding: 16px;
 }
+
+/* Every view animates itself in on mount, which covers the window resize
+   that happens as the plugin moves between states. */
+.view {
+  animation: view-in var(--dur-3) var(--ease-out) both;
+}
+
+/* ---------- Centered states (empty / extracting) ---------- */
 
 .centeredState {
   display: flex;
@@ -53,26 +96,67 @@
   text-align: center;
 }
 
+.centeredState > * {
+  animation: rise-in var(--dur-4) var(--ease-out) both;
+}
+
+.centeredState > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.centeredState > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.centeredState > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+.centeredState > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+
+.illustrationWrap {
+  position: relative;
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* Soft brand halo behind the artwork. */
+.illustrationWrap::before {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: 190px;
+  height: 130px;
+  background: radial-gradient(ellipse at center, var(--accent-glow), transparent 68%);
+  content: "";
+  opacity: 0.22;
+  transform: translate(-50%, -50%);
+}
+
 .illustration {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 168px;
   height: 112px;
-  margin-bottom: 10px;
   object-fit: contain;
 }
 
 .extractingIllustration {
-  animation: extracting-float 1.5s ease-in-out infinite alternate;
+  animation: extracting-float 3.2s var(--ease-out) infinite alternate;
 }
 
 .stateTitle,
 .stateTitleLeft {
   margin: 0;
   color: var(--figma-color-text, #1e1e1e);
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.18px;
-  line-height: 21px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.12px;
+  line-height: 20px;
 }
 
 .stateTitle:focus,
@@ -85,7 +169,6 @@
 }
 
 .stateTitleLeft {
-  max-width: 310px;
   overflow: hidden;
   text-align: left;
   text-overflow: ellipsis;
@@ -93,7 +176,7 @@
 }
 
 .stateBody {
-  max-width: 320px;
+  max-width: 296px;
   margin: 6px 0 0;
   color: var(--figma-color-text-secondary, #666666);
   font-size: 11px;
@@ -101,11 +184,16 @@
 }
 
 .quietNote {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--figma-color-bg-secondary, #f5f5f5);
   color: var(--figma-color-text-tertiary, #858585);
-  font-size: 9px;
-  line-height: 13px;
+  font-size: 10px;
+  line-height: 14px;
 }
+
+/* ---------- Ready / error states ---------- */
 
 .readyState,
 .resultState {
@@ -115,40 +203,86 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+
+.readyState > * {
+  animation: rise-in var(--dur-4) var(--ease-out) both;
+}
+
+.readyState > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.readyState > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.readyState > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.readyState > *:nth-child(4) {
+  animation-delay: 135ms;
 }
 
 .stateKicker {
-  margin: 0 0 2px;
-  color: var(--figma-color-text-tertiary, #858585);
-  font-size: 8px;
+  margin: 0 0 3px;
+  color: var(--accent);
+  font-size: 9px;
   font-weight: 650;
-  letter-spacing: 0.65px;
+  letter-spacing: 0.7px;
   line-height: 12px;
   text-transform: uppercase;
 }
 
 .selectionSummary,
 .resultMeta {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   overflow: hidden;
   color: var(--figma-color-text-secondary, #666666);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .selectionList {
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--figma-color-border, #e5e5e5);
+  border-radius: 8px;
+  background: var(--figma-color-bg-secondary, #fafafa);
 }
 
 .selectionRow {
   display: grid;
-  min-height: 30px;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  min-height: 32px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
-  border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+  padding: 0 10px 0 8px;
+  animation: row-in var(--dur-3) var(--ease-out) both;
+  transition: background var(--dur-1) ease-out;
+}
+
+.selectionRow:hover {
+  background: var(--figma-color-bg-hover, #ededed);
+}
+
+.selectionRow + .selectionRow {
+  border-top: 1px solid var(--figma-color-border, #e5e5e5);
+}
+
+.selectionRow:nth-child(1) {
+  animation-delay: 60ms;
+}
+
+.selectionRow:nth-child(2) {
+  animation-delay: 110ms;
+}
+
+.selectionRow:nth-child(3) {
+  animation-delay: 160ms;
 }
 
 .selectionIcon {
@@ -159,102 +293,174 @@
 .selectionName {
   overflow: hidden;
   color: var(--figma-color-text, #1e1e1e);
-  font-size: 10px;
-  font-weight: 550;
-  line-height: 14px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .selectionSize {
-  padding-left: 10px;
+  margin-left: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--figma-color-bg, #ffffff);
+  box-shadow: inset 0 0 0 1px var(--figma-color-border, #e5e5e5);
   color: var(--figma-color-text-tertiary, #858585);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 8px;
+  font-size: 9px;
+  line-height: 13px;
 }
 
-.moreFrames,
-.ignoredNote {
+.selectionNote {
+  padding: 6px 10px;
+  border-top: 1px solid var(--figma-color-border, #e5e5e5);
   color: var(--figma-color-text-tertiary, #858585);
-  font-size: 8px;
-  line-height: 12px;
-}
-
-.moreFrames {
-  padding-top: 5px;
-}
-
-.ignoredNote {
-  padding-top: 5px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .optionGroup {
   display: grid;
-  grid-template-columns: auto 174px;
+  grid-template-columns: minmax(0, 1fr) 162px;
   align-items: center;
   gap: 12px;
-  padding-top: 2px;
 }
 
 .optionHeading {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .optionLabel {
   color: var(--figma-color-text, #1e1e1e);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 15px;
 }
 
 .optionHint {
-  display: none;
+  color: var(--figma-color-text-tertiary, #858585);
+  font-size: 10px;
+  line-height: 13px;
 }
 
+/* Pins the call to action to the bottom so the panel stays composed at any
+   height the selection happens to produce. */
+.ctaSlot {
+  margin-top: auto;
+}
+
+/* ---------- Progress ---------- */
+
 .progressTrack {
-  width: 180px;
-  height: 3px;
-  margin-top: 14px;
+  position: relative;
+  width: 196px;
+  height: 4px;
+  margin-top: 16px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--figma-color-bg-tertiary, #dedede);
 }
 
 .progressFill {
+  position: relative;
   display: block;
   height: 100%;
+  overflow: hidden;
   border-radius: inherit;
   background: var(--accent);
-  transition: width 180ms ease-out;
+  box-shadow: 0 0 10px var(--accent-glow);
+  transition: width var(--dur-4) var(--ease-out);
+}
+
+/* A sheen that keeps travelling while a frame is being read, so the bar still
+   signals work between the discrete per-frame steps. */
+.progressFill::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  content: "";
+  animation: sheen 1.4s ease-in-out infinite;
+}
+
+/* ---------- Result ---------- */
+
+.resultState > * {
+  animation: rise-in var(--dur-4) var(--ease-out) both;
+}
+
+.resultState > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.resultState > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.resultState > *:nth-child(3) {
+  animation-delay: 100ms;
 }
 
 .resultHeadingRow {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
+.resultHeading {
+  min-width: 0;
+}
+
 .newButton {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 6px;
+  gap: 5px;
+  padding: 5px 9px 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   background: transparent;
   color: var(--figma-color-text-secondary, #666666);
   cursor: pointer;
   font: inherit;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 550;
+  transition:
+    background var(--dur-1) ease-out,
+    border-color var(--dur-1) ease-out,
+    color var(--dur-1) ease-out;
+}
+
+.newButton svg {
+  transition: transform var(--dur-3) var(--ease-out);
 }
 
 .newButton:hover {
+  border-color: var(--figma-color-border, #e5e5e5);
   background: var(--figma-color-bg-hover, #ededed);
   color: var(--figma-color-text, #1e1e1e);
 }
 
+.newButton:hover svg {
+  transform: rotate(-180deg);
+}
+
+.newButton:active {
+  transform: scale(0.97);
+}
+
 .fileWindow {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -262,9 +468,27 @@
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #303035;
-  border-radius: 8px;
-  background: #171719;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  background: var(--code-bg);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 8px 24px -12px rgba(0, 0, 0, 0.4);
+}
+
+/* Fades content into the frame edge so a long file reads as continuing rather
+   than cut off. The preview's bottom padding matches, so the last line still
+   clears it once scrolled to the end. */
+.fileWindow::after {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, var(--code-bg));
+  content: "";
+  pointer-events: none;
 }
 
 .codePreview {
@@ -272,53 +496,73 @@
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  padding: 10px 0 12px;
+  padding: 9px 0 24px;
   overflow: auto;
-  background: #171719;
-  scrollbar-color: #4b4b52 transparent;
+  scrollbar-color: #45454e transparent;
   scrollbar-width: thin;
+}
+
+.codePreview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .codeLine {
   display: grid;
   width: max-content;
   min-width: 100%;
-  min-height: 15px;
-  grid-template-columns: 32px max-content;
-  padding-right: 14px;
+  grid-template-columns: 38px max-content;
+  padding-right: 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 8.5px;
-  line-height: 15px;
+  font-size: 10px;
+  line-height: 17px;
   white-space: pre;
+  /* Capped so a long file still finishes revealing quickly. */
+  animation: line-in var(--dur-2) ease-out both;
+  animation-delay: calc(min(var(--line-index, 0), 26) * 9ms);
+}
+
+.codeLine:hover {
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .lineNumber {
-  padding-right: 8px;
-  color: #55555e;
+  position: sticky;
+  left: 0;
+  margin-right: 10px;
+  padding-right: 9px;
+  border-right: 1px solid var(--code-border);
+  background: var(--code-bg);
+  color: var(--code-line);
   text-align: right;
   user-select: none;
 }
 
+.codeLine:hover .lineNumber {
+  color: #8a8a96;
+}
+
 .codeText {
-  color: #d8d8df;
+  color: var(--code-text);
 }
 
 .codeHeading {
-  color: #9a8cff;
+  color: var(--code-heading);
+  font-weight: 600;
 }
 
 .codeComment {
-  color: #777780;
+  color: var(--code-comment);
 }
 
 .codeKey {
-  color: #72b6ff;
+  color: var(--code-key);
 }
 
 .actionRow {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 1.1fr 0.9fr;
   gap: 8px;
 }
 
@@ -326,24 +570,56 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
 }
+
+.buttonIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The tick that replaces the clipboard icon lands with a small pop. */
+.buttonIconPop {
+  animation: icon-pop var(--dur-3) var(--ease-spring) both;
+}
+
+/* ---------- Buttons ---------- */
 
 .primaryButton,
 .secondaryButton {
-  min-height: 30px !important;
-  border-radius: 7px !important;
-  font-size: 10px !important;
+  min-height: 32px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 550 !important;
+  transition:
+    background var(--dur-1) ease-out,
+    border-color var(--dur-1) ease-out,
+    box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-1) var(--ease-out) !important;
 }
 
 .primaryButton {
-  border-color: var(--figma-color-text, #1e1e1e) !important;
-  background: var(--figma-color-text, #1e1e1e) !important;
-  color: var(--figma-color-bg, #ffffff) !important;
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+  color: var(--accent-on) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
 }
 
 .primaryButton:hover {
-  opacity: 0.9;
+  border-color: var(--accent-hover) !important;
+  background: var(--accent-hover) !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.14),
+    0 6px 16px -8px var(--accent-glow) !important;
+  transform: translateY(-1px);
+}
+
+.primaryButton:active {
+  border-color: var(--accent-active) !important;
+  background: var(--accent-active) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
+  transform: translateY(0) scale(0.99);
 }
 
 .secondaryButton {
@@ -352,23 +628,66 @@
   color: var(--figma-color-text, #1e1e1e) !important;
 }
 
+.secondaryButton:hover {
+  background: var(--figma-color-bg-hover, #ededed) !important;
+  transform: translateY(-1px);
+}
+
+.secondaryButton:active {
+  background: var(--figma-color-bg-pressed, #e0e0e0) !important;
+  transform: translateY(0) scale(0.99);
+}
+
+.copiedButton {
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+  animation: copied-flash var(--dur-4) var(--ease-out);
+}
+
+/* ---------- Segmented control ----------
+   Sizing/colour only, layered over the component library's own styles so the
+   control matches the rest of the panel. */
+
+.optionControl label > div {
+  min-height: 26px !important;
+  border-radius: 6px !important;
+  font-size: 10px !important;
+  transition:
+    background var(--dur-1) ease-out,
+    color var(--dur-1) ease-out !important;
+}
+
+.optionControl input:checked + div {
+  background: var(--accent) !important;
+  color: var(--accent-on) !important;
+}
+
+/* ---------- Error ---------- */
+
 .errorBanner {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px;
+  padding: 9px 10px;
   border-radius: 8px;
   background: var(--figma-color-bg-danger-tertiary, #fff0ee);
   color: var(--figma-color-text-danger, #d32f2f);
+  animation: banner-in var(--dur-4) var(--ease-spring) both;
 }
 
 .errorBannerIcon {
   display: inline-flex;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   align-items: center;
   justify-content: center;
+  margin-top: 1px;
+}
+
+.errorBannerIcon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .errorBanner strong,
@@ -377,15 +696,18 @@
 }
 
 .errorBanner strong {
-  font-size: 9px;
-  line-height: 13px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
 }
 
+/* Inherits the danger colour rather than the neutral secondary, which reads as
+   washed out against the banner's tint. */
 .errorBanner span {
-  margin-top: 1px;
-  color: var(--figma-color-text-secondary, #666666);
-  font-size: 8px;
-  line-height: 12px;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 14px;
+  opacity: 0.8;
 }
 
 .copyArea,
@@ -400,21 +722,134 @@
   white-space: nowrap;
 }
 
-@keyframes extracting-float {
+/* ---------- Keyframes ---------- */
+
+@keyframes view-in {
   from {
-    transform: translateY(2px) scale(0.99);
+    opacity: 0;
   }
   to {
-    transform: translateY(-3px) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes line-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes icon-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes copied-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  60% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes extracting-float {
+  from {
+    transform: translateY(2px) scale(0.995);
+  }
+  to {
+    transform: translateY(-4px) scale(1.005);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .extractingIllustration {
-    animation: none;
+  .view,
+  .centeredState > *,
+  .readyState > *,
+  .resultState > *,
+  .selectionRow,
+  .codeLine,
+  .errorBanner,
+  .extractingIllustration,
+  .buttonIconPop,
+  .copiedButton,
+  .progressFill::after {
+    animation: none !important;
   }
 
-  .progressFill {
-    transition: none;
+  .progressFill,
+  .newButton,
+  .newButton svg,
+  .primaryButton,
+  .secondaryButton,
+  .selectionRow,
+  .optionControl label > div {
+    transition: none !important;
+  }
+
+  .primaryButton:hover,
+  .secondaryButton:hover,
+  .primaryButton:active,
+  .secondaryButton:active,
+  .newButton:active {
+    transform: none !important;
+  }
+
+  .newButton:hover svg {
+    transform: none;
   }
 }

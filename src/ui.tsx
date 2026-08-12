@@ -195,7 +195,7 @@ function EmptyState({
   ignoredCount: number
 }) {
   return (
-    <section className={styles.centeredState}>
+    <section className={styles.centeredState + ' ' + styles.view}>
       <Illustration src={selectIllustration} />
       <StateTitle headingRef={headingRef}>Select a frame or section</StateTitle>
       <p className={styles.stateBody}>
@@ -232,7 +232,7 @@ function ReadyState({
       ? selection.frames[0].name
       : String(selection.frames.length) + ' screens selected'
   return (
-    <section className={styles.readyState}>
+    <section className={styles.readyState + ' ' + styles.view}>
       <div>
         <p className={styles.stateKicker}>Selection</p>
         <StateTitle headingRef={headingRef} left>
@@ -241,48 +241,78 @@ function ReadyState({
         <p className={styles.selectionSummary}>{title}</p>
       </div>
       <SelectionCard selection={selection} />
-      <div className={styles.optionGroup}>
-        <div className={styles.optionHeading}>
-          <span className={styles.optionLabel}>Color output</span>
-          <span className={styles.optionHint}>Use names when your design uses tokens.</span>
-        </div>
+      <ColorOption
+        colorMode={colorMode}
+        hint="Token names, with hex fallback."
+        onColorModeChange={onColorModeChange}
+      />
+      <div className={styles.ctaSlot}>
+        <Button className={styles.primaryButton} fullWidth onClick={onGenerate}>
+          Create screens.md
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function ColorOption({
+  colorMode,
+  hint,
+  onColorModeChange
+}: {
+  colorMode: string
+  hint: string
+  onColorModeChange: (value: string) => void
+}) {
+  return (
+    <div aria-labelledby="color-output-label" className={styles.optionGroup} role="group">
+      <div className={styles.optionHeading}>
+        <span className={styles.optionLabel} id="color-output-label">
+          Color output
+        </span>
+        <span className={styles.optionHint}>{hint}</span>
+      </div>
+      <div className={styles.optionControl}>
         <SegmentedControl
           options={colorOptions}
           value={colorMode}
           onValueChange={onColorModeChange}
         />
       </div>
-      <Button className={styles.primaryButton} fullWidth onClick={onGenerate}>
-        Create screens.md
-      </Button>
-    </section>
+    </div>
   )
 }
 
 function SelectionCard({ selection }: { selection: SelectionSummary }) {
+  // Both overflow facts share one footer row: two stacked notes read as clutter
+  // in a card this small.
+  const notes: Array<string> = []
+  if (selection.frames.length > 3) {
+    notes.push('+' + (selection.frames.length - 3) + ' more')
+  }
+  if (selection.ignoredCount > 0) {
+    notes.push(
+      selection.ignoredCount +
+        ' unsupported ' +
+        (selection.ignoredCount === 1 ? 'layer' : 'layers') +
+        ' ignored'
+    )
+  }
   return (
     <div aria-live="polite" className={styles.selectionList}>
-        {selection.frames.slice(0, 3).map((frame) => (
-          <div className={styles.selectionRow} key={frame.id}>
-            <span aria-hidden="true" className={styles.selectionIcon}>
-              {frame.type === 'FRAME' ? <IconFrame16 /> : <IconSection16 />}
-            </span>
-            <span className={styles.selectionName}>{frame.name}</span>
-            <span className={styles.selectionSize}>
-              {Math.round(frame.width) + '×' + Math.round(frame.height)}
-            </span>
-          </div>
-        ))}
-        {selection.frames.length > 3 ? (
-          <div className={styles.moreFrames}>+{selection.frames.length - 3} more</div>
-        ) : null}
-      {selection.ignoredCount > 0 ? (
-        <div className={styles.ignoredNote}>
-          {selection.ignoredCount +
-            ' unsupported ' +
-            (selection.ignoredCount === 1 ? 'layer' : 'layers') +
-            ' ignored'}
+      {selection.frames.slice(0, 3).map((frame) => (
+        <div className={styles.selectionRow} key={frame.id}>
+          <span aria-hidden="true" className={styles.selectionIcon}>
+            {frame.type === 'FRAME' ? <IconFrame16 /> : <IconSection16 />}
+          </span>
+          <span className={styles.selectionName}>{frame.name}</span>
+          <span className={styles.selectionSize}>
+            {Math.round(frame.width) + '×' + Math.round(frame.height)}
+          </span>
         </div>
+      ))}
+      {notes.length > 0 ? (
+        <div className={styles.selectionNote}>{notes.join(' · ')}</div>
       ) : null}
     </div>
   )
@@ -305,7 +335,7 @@ function ExtractingState({
     total +
     (progress?.frameName ? ' · ' + progress.frameName : '')
   return (
-    <section className={styles.centeredState}>
+    <section className={styles.centeredState + ' ' + styles.view}>
       <Illustration extracting src={extractingIllustration} />
       <StateTitle headingRef={headingRef}>Building screens.md</StateTitle>
       <p aria-live="polite" className={styles.stateBody}>
@@ -352,9 +382,9 @@ function ResultState({
     ' items · ' +
     formatBytes(markdown.length)
   return (
-    <section className={styles.resultState}>
+    <section className={styles.resultState + ' ' + styles.view}>
       <div className={styles.resultHeadingRow}>
-        <div>
+        <div className={styles.resultHeading}>
           <StateTitle headingRef={headingRef} left>
             screens.md
           </StateTitle>
@@ -369,9 +399,18 @@ function ResultState({
         <CodePreview markdown={markdown} />
       </div>
       <div className={styles.actionRow}>
-        <Button className={styles.primaryButton} fullWidth onClick={onCopy}>
+        <Button
+          className={styles.primaryButton + (copied ? ' ' + styles.copiedButton : '')}
+          fullWidth
+          onClick={onCopy}
+        >
           <span className={styles.buttonContent}>
-            {copied ? <IconCheck16 /> : <IconClipboardSmall24 />}
+            <span
+              className={styles.buttonIcon + (copied ? ' ' + styles.buttonIconPop : '')}
+              key={copied ? 'copied' : 'idle'}
+            >
+              {copied ? <IconCheck16 /> : <IconClipboardSmall24 />}
+            </span>
             {copied ? 'Copied' : 'Copy Markdown'}
           </span>
         </Button>
@@ -410,7 +449,7 @@ function ErrorState({
       : selection.frames.length + ' screens selected'
 
   return (
-    <section className={styles.readyState}>
+    <section className={styles.readyState + ' ' + styles.view}>
       <div>
         <p className={styles.stateKicker}>Selection</p>
         <StateTitle headingRef={headingRef} left>
@@ -428,32 +467,29 @@ function ErrorState({
         </div>
       </div>
       <SelectionCard selection={selection} />
-      <div className={styles.optionGroup}>
-        <div className={styles.optionHeading}>
-          <span className={styles.optionLabel}>Color output</span>
-          <span className={styles.optionHint}>Your settings are unchanged.</span>
-        </div>
-        <SegmentedControl
-          options={colorOptions}
-          value={colorMode}
-          onValueChange={onColorModeChange}
-        />
+      <ColorOption
+        colorMode={colorMode}
+        hint="Your settings are unchanged."
+        onColorModeChange={onColorModeChange}
+      />
+      <div className={styles.ctaSlot}>
+        <Button className={styles.primaryButton} fullWidth onClick={onRetry}>
+          Retry extraction
+        </Button>
       </div>
-      <Button className={styles.primaryButton} fullWidth onClick={onRetry}>
-        Retry extraction
-      </Button>
     </section>
   )
 }
 
 function Illustration({ extracting, src }: { extracting?: boolean; src: string }) {
   return (
-    <img
-      alt=""
-      aria-hidden="true"
-      className={styles.illustration + (extracting ? ' ' + styles.extractingIllustration : '')}
-      src={src}
-    />
+    <span aria-hidden="true" className={styles.illustrationWrap}>
+      <img
+        alt=""
+        className={styles.illustration + (extracting ? ' ' + styles.extractingIllustration : '')}
+        src={src}
+      />
+    </span>
   )
 }
 
@@ -477,7 +513,11 @@ function CodePreview({ markdown }: { markdown: string }) {
   return (
     <div aria-label="Generated Markdown preview" className={styles.codePreview} tabIndex={0}>
       {markdown.split('\n').map((line, index) => (
-        <div className={styles.codeLine} key={String(index) + '-' + line}>
+        <div
+          className={styles.codeLine}
+          key={String(index) + '-' + line}
+          style={{ '--line-index': index }}
+        >
           <span aria-hidden="true" className={styles.lineNumber}>
             {index + 1}
           </span>
@@ -492,7 +532,8 @@ function codeTone(line: string): string {
   if (line.startsWith('## ')) {
     return styles.codeHeading
   }
-  if (line.startsWith('#') || line.charCodeAt(0) === 96) {
+  // `>` is the interpretation guide: prose about the spec, not the spec itself.
+  if (line.startsWith('#') || line.startsWith('>') || line.charCodeAt(0) === 96) {
     return styles.codeComment
   }
   if (/^\s*(screen|items|\d+):/.test(line)) {
