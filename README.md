@@ -1,6 +1,6 @@
 # Screen Spec MD
 
-A Figma plugin that turns selected frames into a **Markdown screen spec** — a compact YAML list
+A Figma plugin that turns selected screen containers into a **Markdown screen spec** — a compact YAML list
 where every UI element carries its role (or repo component name), its position, exact text,
 variant props, icons, and optionally color — for pasting into an LLM coding agent **alongside a
 screenshot**.
@@ -27,6 +27,8 @@ positioned elements and emits one `## Screen N` block:
 - **Component instances** are tagged with their repo component name and **variant props**
   (e.g. `{ Size: Small, State: Default }`), plus an inline **icon** inventory.
 - **Layout intent** for auto-layout containers (`row gap 16 between align center`).
+- **Component depth** from Base through 4 — keep instances compact or reveal up to four nested
+  component boundaries while preserving their ownership and layout.
 - **Color** (optional, off by default) — a bound **variable/style token** name, or a **raw hex**
   fallback when no token is mapped.
 
@@ -54,10 +56,12 @@ items:
   6: { role: body, box: [30, 40, 12, 2], text: Read/Edit access to Leads, icons: [Check] }
 ```
 
-Output is one combined `screens.md` (a `## Screen N` block per selected frame), shown in a
-copyable preview and downloadable from the UI. A **Colors** toggle (Off / Tokens / Hex) controls
-color extraction. In Dev Mode, the same Markdown is also available as a plain-text result in the
-Code section.
+Output is one combined `screens.md` (a `## Screen N` block per selected screen container), typed
+into a file window you can copy or download. A **Color output** toggle (Off / Tokens / Hex) controls
+color extraction. A **Component depth** control (Base / 1 / 2 / 3 / 4) controls how many nested
+instance boundaries are expanded. Repeated expanded structures are emitted once under
+`## Reusable components` and placed with compact `ref: C1` references. In Dev Mode, the same
+Markdown is also available as a plain-text result in the Code section using Base depth.
 
 ## Develop
 
@@ -70,8 +74,9 @@ $ npm run watch      # rebuild on change
 ```
 
 Load it: in the Figma desktop app, run **Import plugin from manifest…** (Quick Actions) and
-pick the generated `manifest.json`. In design mode, select one or more frames or sections, run the
-plugin, pick a color mode if you want, and click **Create screens.md**. In Dev Mode, open it from the
+pick the generated `manifest.json`. In design mode, select one or more frames, components,
+component sets, instances, or sections, run the plugin, choose the color and component-depth
+options you want, and click **Start Scan**. In Dev Mode, open it from the
 Inspect / Plugins panel for the same UI, or select a supported screen container in the Code
 section to get Markdown directly.
 
@@ -79,6 +84,8 @@ Check the formatting offline (no Figma needed) — feeds sample `ScreenData` thr
 
 ```
 $ npx --yes tsx scripts/selftest.ts
+$ npx --yes tsx scripts/ui-state-selftest.ts
+$ npx --yes tsx scripts/extract-selftest.ts
 ```
 
 ### Source layout
@@ -89,8 +96,9 @@ $ npx --yes tsx scripts/selftest.ts
   (role inference, component/variant/icon capture, chart/table/cards/tabs collapse, icon-label
   pairing, color-token resolution, de-noising).
 - [`src/lib/outline.ts`](src/lib/outline.ts) — assembles the combined Markdown (the YAML
-  `items` list per screen).
-- [`src/ui.tsx`](src/ui.tsx) — UI: color toggle → Generate → preview + `screens.md` download.
+  `items` list per screen plus reusable component definitions and references).
+- [`src/ui.tsx`](src/ui.tsx) — UI: one 512×512 canvas whose three windows merge, get scanned,
+  and grow into the `screens.md` file window (select → settings → scanning → code block).
 - [`src/types.ts`](src/types.ts) — shared `Role` / `ColorMode` / `Element` / `Box` / `ScreenData`
   types.
 

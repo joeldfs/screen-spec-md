@@ -12,6 +12,8 @@ Thanks for helping improve Screen Spec MD.
    npm ci
    npm run build
    npx --yes tsx scripts/selftest.ts
+   npx --yes tsx scripts/ui-state-selftest.ts
+   npx --yes tsx scripts/extract-selftest.ts
    ```
 
 4. Describe the user-visible change and any Figma setup needed to verify it.

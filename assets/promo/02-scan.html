@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><link rel="stylesheet" href="_base.css" />
+<style>
+  /* Ambient bloom from the blade, so the green reads as light rather than paint. */
+  .bloom { position: absolute; left: 50%; top: 200px; width: 1500px; height: 700px;
+           margin-left: -750px; pointer-events: none;
+           background: radial-gradient(ellipse at center, rgba(53,213,138,.16), transparent 62%); }
+  .brand { position: absolute; left: 132px; top: 92px; }
+  .stage { position: absolute; left: 50%; top: 236px; margin-left: -420px; width: 840px; height: 468px; }
+  .win { width: 840px; height: 468px; box-shadow: 0 50px 110px rgba(0,0,0,.6); position: relative; }
+  .skel { padding: 34px; gap: 30px; }
+  .skel .rail { width: 92px; }
+  .skel .lines { gap: 26px; }
+  .skel .lines b { height: 18px; }
+  /* The blade lives inside the window and crosses it, as in the plugin. */
+  .blade { position: absolute; top: 46px; bottom: 0; left: 46%; width: 7px;
+           border-radius: 5px; background: #35d58a; box-shadow: 0 0 46px 6px #35d58a; }
+  .blade::after { content: ""; position: absolute; top: 0; bottom: 0; left: -26px; right: -26px;
+                  background: #35d58a; opacity: .14; filter: blur(20px); border-radius: 12px; }
+  .copy { position: absolute; left: 0; right: 0; text-align: center; }
+  h1 { font-size: 76px; }
+  .sub { font-size: 28px; margin-top: 26px; }
+  .copy { top: 812px; }
+</style></head>
+<body><div class="bg"></div><div class="grain"></div><div class="bloom"></div><div class="wrap">
+
+  <div class="brand">
+    <div class="mark"><div class="bar"><i></i><i></i><i></i></div><div class="body"><span></span><span></span></div></div>
+    <div class="wordmark">Screen Spec MD</div>
+  </div>
+
+  <div class="stage">
+    <div class="win"><div class="bar"><i></i><i></i><i></i></div>
+      <div class="skel"><div class="rail"></div><div class="lines"><b></b><b></b><b></b><b></b><b></b></div></div>
+      <div class="blade"></div>
+    </div>
+  </div>
+
+  <div class="copy">
+    <h1>Reads the layer tree. Not the pixels.</h1>
+    <p class="sub">Every name, variant and string comes out exact.</p>
+  </div>
+
+</div></body></html>

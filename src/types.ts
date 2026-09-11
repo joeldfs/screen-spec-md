@@ -38,6 +38,8 @@ export interface Element {
   id?: number
   text?: string
   component?: string
+  // Reusable-definition reference emitted by the Markdown formatter.
+  ref?: string
   // Resolved fill/text color when color extraction is on: a design-token name
   // (bound variable or color style) or a raw hex fallback. Omitted when off.
   color?: string
@@ -74,6 +76,11 @@ export interface Element {
   // Output-only ownership references. Internal source ids are stripped by the
   // Markdown formatter after stable numeric ids have been assigned.
   children?: Array<number>
+  // Extraction-only component metadata. These fields are stripped before
+  // Markdown is rendered.
+  componentKey?: string
+  componentSignature?: string
+  expandedComponent?: boolean
   sourceNodeId?: string
   parentSourceNodeId?: string
 }
@@ -92,9 +99,16 @@ export interface ScreenData {
 // variable/style) with a raw-hex fallback, or always raw hex.
 export type ColorMode = 'off' | 'tokens' | 'hex'
 
+export type ComponentDepth = 0 | 1 | 2 | 3 | 4
+
+export interface GenerateOptions {
+  colorMode: ColorMode
+  componentDepth: ComponentDepth
+}
+
 export interface GenerateHandler extends EventHandler {
   name: 'GENERATE'
-  handler: (colorMode: ColorMode) => void
+  handler: (options: GenerateOptions) => void
 }
 
 export interface UiReadyHandler extends EventHandler {
@@ -111,11 +125,15 @@ export interface SelectionSummary {
   frames: Array<{
     id: string
     name: string
-    type: 'FRAME' | 'SECTION'
+    type: 'FRAME' | 'COMPONENT' | 'COMPONENT_SET' | 'INSTANCE' | 'SECTION'
     width: number
     height: number
   }>
   ignoredCount: number
+  // Whether the selection binds any colour to a variable or colour style. Drives
+  // the Color output default, so token-mapped files get token names without the
+  // user having to know the option exists.
+  hasColorTokens: boolean
 }
 
 export interface SelectionHandler extends EventHandler {

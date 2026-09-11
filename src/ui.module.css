@@ -10,669 +10,1006 @@
   margin: 0;
 }
 
+/* The Agent Sim canvas is dark in both Figma themes: it reads as a device
+   surface, not as plugin chrome, so it does not follow --figma-color-bg. */
 :global(body) {
   overflow: hidden;
-  background: var(--figma-color-bg, #ffffff);
-  color: var(--figma-color-text, #1e1e1e);
+  background: #0f0f0f;
+  color: #f7f7f7;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 :global(button:focus-visible),
 :global([tabindex]:focus-visible) {
-  outline: 2px solid var(--accent, #6c5cff);
+  outline: 2px solid #0588f0;
   outline-offset: 2px;
 }
 
 .app {
-  /* Brand — the violet used by the plugin illustrations. */
-  --accent: #6c5cff;
-  --accent-hover: #5b4be6;
-  --accent-active: #4f3fd6;
-  --accent-on: #ffffff;
-  --accent-soft: rgba(108, 92, 255, 0.1);
-  --accent-glow: rgba(108, 92, 255, 0.35);
+  --surface: #202020;
+  --sunken: #171717;
+  --code-bg: #111111;
+  --line: #2b2b2b;
 
-  /* The code surface stays dark in both themes: it reads as an editor. */
-  --code-bg: #17171a;
-  --code-bg-alt: #1d1d21;
-  --code-border: #2c2c33;
-  --code-line: #55555f;
-  --code-text: #dcdce4;
-  --code-heading: #a394ff;
-  --code-key: #7cc4ff;
-  --code-comment: #6d6d78;
+  --text: #f7f7f7;
+  --text-strong: #fafafa;
+  --text-label: #e6e6e6;
+  --text-muted: #8a8a8a;
+  /* Secondary copy sits on a near-black canvas, so both of these are lifted off
+     the frame's values to clear 4.5:1 at the sizes they are actually used. */
+  --text-quiet: #a3a3a3;
+  --text-dim: #8f8f8f;
+  --text-fade: #919191;
 
-  /* Motion */
+  --scan: #35d58a;
+  --blue: #0588f0;
+  --orange: #ff6b18;
+
+  --code-keyword: #c678dd;
+  --code-ident: #61afef;
+  --code-type: #98c379;
+  --code-string: #e5c07b;
+  --code-plain: #d4d4d4;
+  --code-comment: #5c6370;
+
+  --danger: #ff6b6b;
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --dur-1: 120ms;
-  --dur-2: 200ms;
-  --dur-3: 320ms;
-  --dur-4: 460ms;
+  --ease-grow: cubic-bezier(0.16, 1, 0.3, 1);
 
-  display: flex;
+  display: grid;
   width: 100%;
   height: 100%;
-  flex-direction: column;
   overflow: hidden;
-  background: var(--figma-color-bg, #ffffff);
-  color: var(--figma-color-text, #1e1e1e);
+  place-items: center;
+  background: #0f0f0f;
 }
 
-:global(html.figma-dark) .app {
-  --accent: #8a7bff;
-  --accent-hover: #9a8dff;
-  --accent-active: #7b6bf5;
-  --accent-on: #14121f;
-  --accent-soft: rgba(138, 123, 255, 0.16);
-  --accent-glow: rgba(138, 123, 255, 0.3);
-}
+/* ---------- Stage ----------
+   One 512x512 surface shared by every phase. The three windows are the same DOM
+   nodes throughout, so a phase change is a transition rather than a swap — that
+   is what lets them merge and the front one grow into the code window. */
 
-.main {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  padding: 16px;
-}
-
-/* Every view animates itself in on mount, which covers the window resize
-   that happens as the plugin moves between states. */
-.view {
-  animation: view-in var(--dur-3) var(--ease-out) both;
-}
-
-/* ---------- Centered states (empty / extracting) ---------- */
-
-.centeredState {
-  display: flex;
+/* No radius and no border of its own: the plugin window already draws the
+   rounded frame, and a second one inside it reads as a box within a box. */
+.stage {
+  position: relative;
   width: 100%;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.centeredState > * {
-  animation: rise-in var(--dur-4) var(--ease-out) both;
-}
-
-.centeredState > *:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.centeredState > *:nth-child(2) {
-  animation-delay: 50ms;
-}
-
-.centeredState > *:nth-child(3) {
-  animation-delay: 100ms;
-}
-
-.centeredState > *:nth-child(4) {
-  animation-delay: 150ms;
-}
-
-.illustrationWrap {
-  position: relative;
-  display: block;
-  margin-bottom: 12px;
-}
-
-/* Soft brand halo behind the artwork. */
-.illustrationWrap::before {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
-  width: 190px;
-  height: 130px;
-  background: radial-gradient(ellipse at center, var(--accent-glow), transparent 68%);
-  content: "";
-  opacity: 0.22;
-  transform: translate(-50%, -50%);
-}
-
-.illustration {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 168px;
-  height: 112px;
-  object-fit: contain;
-}
-
-.extractingIllustration {
-  animation: extracting-float 3.2s var(--ease-out) infinite alternate;
-}
-
-.stateTitle,
-.stateTitleLeft {
-  margin: 0;
-  color: var(--figma-color-text, #1e1e1e);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.12px;
-  line-height: 20px;
-}
-
-.stateTitle:focus,
-.stateTitleLeft:focus {
-  outline: none;
-}
-
-.stateTitle {
-  text-align: center;
-}
-
-.stateTitleLeft {
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stateBody {
-  max-width: 296px;
-  margin: 6px 0 0;
-  color: var(--figma-color-text-secondary, #666666);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.quietNote {
-  margin: 10px 0 0;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--figma-color-bg-secondary, #f5f5f5);
-  color: var(--figma-color-text-tertiary, #858585);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-/* ---------- Ready / error states ---------- */
-
-.readyState,
-.resultState {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.readyState > * {
-  animation: rise-in var(--dur-4) var(--ease-out) both;
-}
-
-.readyState > *:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.readyState > *:nth-child(2) {
-  animation-delay: 45ms;
-}
-
-.readyState > *:nth-child(3) {
-  animation-delay: 90ms;
-}
-
-.readyState > *:nth-child(4) {
-  animation-delay: 135ms;
-}
-
-.stateKicker {
-  margin: 0 0 3px;
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.7px;
-  line-height: 12px;
-  text-transform: uppercase;
-}
-
-.selectionSummary,
-.resultMeta {
-  margin: 3px 0 0;
-  overflow: hidden;
-  color: var(--figma-color-text-secondary, #666666);
-  font-size: 11px;
-  line-height: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selectionList {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--figma-color-border, #e5e5e5);
-  border-radius: 8px;
-  background: var(--figma-color-bg-secondary, #fafafa);
-}
-
-.selectionRow {
-  display: grid;
-  min-height: 32px;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  padding: 0 10px 0 8px;
-  animation: row-in var(--dur-3) var(--ease-out) both;
-  transition: background var(--dur-1) ease-out;
-}
-
-.selectionRow:hover {
-  background: var(--figma-color-bg-hover, #ededed);
-}
-
-.selectionRow + .selectionRow {
-  border-top: 1px solid var(--figma-color-border, #e5e5e5);
-}
-
-.selectionRow:nth-child(1) {
-  animation-delay: 60ms;
-}
-
-.selectionRow:nth-child(2) {
-  animation-delay: 110ms;
-}
-
-.selectionRow:nth-child(3) {
-  animation-delay: 160ms;
-}
-
-.selectionIcon {
-  display: inline-flex;
-  color: var(--figma-color-text-tertiary, #858585);
-}
-
-.selectionName {
-  overflow: hidden;
-  color: var(--figma-color-text, #1e1e1e);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selectionSize {
-  margin-left: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--figma-color-bg, #ffffff);
-  box-shadow: inset 0 0 0 1px var(--figma-color-border, #e5e5e5);
-  color: var(--figma-color-text-tertiary, #858585);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
-  line-height: 13px;
-}
-
-.selectionNote {
-  padding: 6px 10px;
-  border-top: 1px solid var(--figma-color-border, #e5e5e5);
-  color: var(--figma-color-text-tertiary, #858585);
-  font-size: 10px;
-  line-height: 13px;
-}
-
-.optionGroup {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 162px;
-  align-items: center;
-  gap: 12px;
-}
-
-.optionHeading {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.optionLabel {
-  color: var(--figma-color-text, #1e1e1e);
-  font-size: 11px;
-  font-weight: 550;
-  line-height: 15px;
-}
-
-.optionHint {
-  color: var(--figma-color-text-tertiary, #858585);
-  font-size: 10px;
-  line-height: 13px;
-}
-
-/* Pins the call to action to the bottom so the panel stays composed at any
-   height the selection happens to produce. */
-.ctaSlot {
-  margin-top: auto;
-}
-
-/* ---------- Progress ---------- */
-
-.progressTrack {
-  position: relative;
-  width: 196px;
-  height: 4px;
-  margin-top: 16px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--figma-color-bg-tertiary, #dedede);
-}
-
-.progressFill {
-  position: relative;
-  display: block;
   height: 100%;
   overflow: hidden;
-  border-radius: inherit;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
-  transition: width var(--dur-4) var(--ease-out);
-}
-
-/* A sheen that keeps travelling while a frame is being read, so the bar still
-   signals work between the discrete per-frame steps. */
-.progressFill::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.55),
-    transparent
-  );
-  content: "";
-  animation: sheen 1.4s ease-in-out infinite;
-}
-
-/* ---------- Result ---------- */
-
-.resultState > * {
-  animation: rise-in var(--dur-4) var(--ease-out) both;
-}
-
-.resultState > *:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.resultState > *:nth-child(2) {
-  animation-delay: 50ms;
-}
-
-.resultState > *:nth-child(3) {
-  animation-delay: 100ms;
-}
-
-.resultHeadingRow {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.resultHeading {
-  min-width: 0;
-}
-
-.newButton {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px 5px 7px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--figma-color-text-secondary, #666666);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 550;
-  transition:
-    background var(--dur-1) ease-out,
-    border-color var(--dur-1) ease-out,
-    color var(--dur-1) ease-out;
-}
-
-.newButton svg {
-  transition: transform var(--dur-3) var(--ease-out);
-}
-
-.newButton:hover {
-  border-color: var(--figma-color-border, #e5e5e5);
-  background: var(--figma-color-bg-hover, #ededed);
-  color: var(--figma-color-text, #1e1e1e);
-}
-
-.newButton:hover svg {
-  transform: rotate(-180deg);
-}
-
-.newButton:active {
-  transform: scale(0.97);
-}
-
-.fileWindow {
-  position: relative;
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--code-border);
-  border-radius: 10px;
-  background: var(--code-bg);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 8px 24px -12px rgba(0, 0, 0, 0.4);
-}
-
-/* Fades content into the frame edge so a long file reads as continuing rather
-   than cut off. The preview's bottom padding matches, so the last line still
-   clears it once scrolled to the end. */
-.fileWindow::after {
-  position: absolute;
-  z-index: 1;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 20px;
-  background: linear-gradient(to bottom, transparent, var(--code-bg));
-  content: "";
-  pointer-events: none;
-}
-
-.codePreview {
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  padding: 9px 0 24px;
-  overflow: auto;
-  scrollbar-color: #45454e transparent;
-  scrollbar-width: thin;
-}
-
-.codePreview:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.codeLine {
-  display: grid;
-  width: max-content;
-  min-width: 100%;
-  grid-template-columns: 38px max-content;
-  padding-right: 16px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-  line-height: 17px;
-  white-space: pre;
-  /* Capped so a long file still finishes revealing quickly. */
-  animation: line-in var(--dur-2) ease-out both;
-  animation-delay: calc(min(var(--line-index, 0), 26) * 9ms);
-}
-
-.codeLine:hover {
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.lineNumber {
-  position: sticky;
-  left: 0;
-  margin-right: 10px;
-  padding-right: 9px;
-  border-right: 1px solid var(--code-border);
-  background: var(--code-bg);
-  color: var(--code-line);
-  text-align: right;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'><rect x='0' y='0' height='100%25' width='100%25' fill='url(%23grad)' opacity='1'/><defs><radialGradient id='grad' gradientUnits='userSpaceOnUse' cx='0' cy='0' r='10' gradientTransform='matrix(1.5675e-15 25.6 -25.6 1.5675e-15 256 256)'><stop stop-color='rgba(23,23,23,1)' offset='0'/><stop stop-color='rgba(16,16,16,1)' offset='0.9999'/></radialGradient></defs></svg>");
   user-select: none;
 }
 
-.codeLine:hover .lineNumber {
-  color: #8a8a96;
+/* ---------- Windows ---------- */
+
+.card {
+  position: absolute;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border-radius: 6px;
+  background: var(--surface);
+  transform-origin: center center;
+  transition:
+    left 0.65s var(--ease-out),
+    top 0.65s var(--ease-out),
+    width 0.65s var(--ease-out),
+    height 0.65s var(--ease-out),
+    transform 0.65s var(--ease-out),
+    opacity 0.45s ease;
 }
 
-.codeText {
-  color: var(--code-text);
+/* The front window leads the merge; the two behind it trail it. */
+.cardA {
+  z-index: 3;
 }
 
-.codeHeading {
-  color: var(--code-heading);
+.cardB {
+  z-index: 2;
+  transition-delay: 60ms;
+}
+
+.cardC {
+  z-index: 1;
+  transition-delay: 120ms;
+}
+
+.cardBorder {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  pointer-events: none;
+  transition: border-color 0.4s ease;
+}
+
+.cardA .cardBorder {
+  box-shadow: var(--shadow-md);
+}
+
+.cardB .cardBorder,
+.cardC .cardBorder {
+  box-shadow: var(--shadow-xs);
+}
+
+/* The window the settings act on is called out while they are open. */
+.stage[data-phase="settings"] .cardA .cardBorder {
+  border-color: var(--blue);
+}
+
+/* Select — three loose, tilted screens. */
+
+.stage[data-phase="select"] .cardA {
+  left: 168.43px;
+  top: 141.33px;
+  width: 151.133px;
+  height: 105.335px;
+  transform: rotate(0deg);
+}
+
+.stage[data-phase="select"] .cardB {
+  left: 124.43px;
+  top: 144.33px;
+  width: 151.133px;
+  height: 105.335px;
+  transform: rotate(-11deg);
+}
+
+.stage[data-phase="select"] .cardC {
+  left: 212.43px;
+  top: 144.33px;
+  width: 151.133px;
+  height: 105.335px;
+  transform: rotate(11deg);
+}
+
+/* Everything past select — the three merge into one stack. */
+
+/* The merged screen sits higher and larger than any one of the loose cards: it
+   is the subject of this phase, and it is centred on the canvas so the labels
+   and the options below it share one axis. */
+.stage[data-phase="settings"] .cardA,
+.stage[data-phase="scanning"] .cardA {
+  left: 151px;
+  top: 112px;
+  width: 210px;
+  height: 144px;
+  transform: rotate(0deg);
+}
+
+.stage[data-phase="settings"] .cardB,
+.stage[data-phase="scanning"] .cardB,
+.stage[data-phase="codeblock"] .cardB {
+  left: 153px;
+  top: 112px;
+  width: 206px;
+  height: 144px;
+  transform: rotate(0deg);
+}
+
+.stage[data-phase="settings"] .cardC,
+.stage[data-phase="scanning"] .cardC,
+.stage[data-phase="codeblock"] .cardC {
+  left: 151px;
+  top: 112px;
+  width: 210px;
+  height: 144px;
+  transform: rotate(0deg);
+}
+
+/* Grow — the merged front window becomes the file window. `growing` starts the
+   move while the scan is still the current view; `codeblock` holds it there
+   afterwards, and covers a result that arrives without a scan. These follow the
+   phase rules on purpose: equal specificity, so source order wins. */
+
+.stage[data-growing="true"] .cardA,
+.stage[data-phase="codeblock"] .cardA {
+  left: 29px;
+  top: 30px;
+  width: 455px;
+  height: 450px;
+  transform: rotate(0deg);
+  transition-duration: 0.9s;
+  transition-timing-function: var(--ease-grow);
+}
+
+.stage[data-growing="true"] .cardB,
+.stage[data-growing="true"] .cardC,
+.stage[data-phase="codeblock"] .cardB,
+.stage[data-phase="codeblock"] .cardC {
+  opacity: 0;
+}
+
+.cardBar {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+  background: var(--sunken);
+}
+
+.cardDot {
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* ---------- Skeleton ----------
+   Stand-in content so the merged screen reads as a screen with something on it
+   rather than an empty box — and so the scan blade has something to pass over. */
+
+.skeleton {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  padding: 11px;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
+}
+
+.stage[data-phase="settings"] .skeleton,
+.stage[data-phase="scanning"] .skeleton {
+  opacity: 1;
+}
+
+.skeletonRail {
+  width: 32px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: #262626;
+}
+
+.skeletonBody {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.skeletonBar {
+  height: 7px;
+  border-radius: 4px;
+  background: #2b2b2b;
+}
+
+.skeletonBar:nth-child(1) {
+  width: 62%;
+  background: #333333;
+}
+
+.skeletonBar:nth-child(2) {
+  width: 92%;
+}
+
+.skeletonBar:nth-child(3) {
+  width: 74%;
+}
+
+.skeletonBar:nth-child(4) {
+  width: 88%;
+}
+
+.skeletonBar:nth-child(5) {
+  width: 48%;
+}
+
+/* ---------- Scanner ----------
+   A blade inside the window, sweeping across it rather than a bar laid over the
+   canvas: the scan is something happening *to* the screen being read. */
+
+.scanner {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  width: 3px;
+  height: calc(100% - 22px);
+  border-radius: 4px;
+  background: var(--scan);
+  box-shadow: 0 0 14px 0 var(--scan);
+  animation: scanner-sweep 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* ---------- Overlays ---------- */
+
+.overlay {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-in;
+}
+
+.overlayOn {
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
+/* Takes the plain fade above; named so every phase's overlay is addressable,
+   and so the empty state's icons never intercept a click. */
+.overlaySelect {
+  pointer-events: none;
+}
+
+/* Held back until the windows have finished merging. */
+.overlaySettings.overlayOn {
+  pointer-events: auto;
+  transition: opacity 0.3s 0.45s ease-out;
+}
+
+.overlayScanning.overlayOn {
+  transition: opacity 0.35s 0.3s ease-out;
+}
+
+/* ---------- Accents ----------
+   The tool glyphs circle the card cluster on nested ellipses. Each one is three
+   nested elements: the ring rotates, the arm holds the radius, and the icon
+   counter-rotates so it stays upright instead of tumbling.
+
+   The arm runs at exactly half the ring's period, so its radius is widest as
+   the icon crosses the horizontal and tightest at the top and bottom. That is
+   what flattens the circle into an ellipse — and the ellipse is what keeps the
+   icons clear of the labels underneath. */
+
+/* Behind the windows, so an icon on a tight ring slips out of sight and comes
+   back round the other side instead of sliding across the artwork. That is also
+   what frees the inner rings to be smaller than the cards. */
+.orbitField {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-in;
+}
+
+.orbitFieldOn {
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
+.orbit {
+  position: absolute;
+  top: 194px;
+  left: 244px;
+  width: 0;
+  height: 0;
+  animation: orbit-ring var(--dur) linear infinite;
+  animation-delay: var(--phase);
+}
+
+.orbitArm {
+  position: absolute;
+  /* Shared timing and no per-icon delay: every radius moves together, so the
+     ring breathes without the spacing ever going uneven. */
+  animation: orbit-arm 7s ease-in-out infinite;
+  transform: translateX(var(--r));
+}
+
+.orbitIcon {
+  display: block;
+  width: var(--size);
+  height: var(--size);
+  margin-top: calc(var(--size) / -2);
+  margin-left: calc(var(--size) / -2);
+  animation: orbit-ring var(--dur) linear infinite reverse;
+  animation-delay: var(--phase);
+  opacity: var(--fade, 1);
+}
+
+@keyframes orbit-ring {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit-arm {
+  0%,
+  100% {
+    transform: translateX(var(--r));
+  }
+  50% {
+    transform: translateX(calc(var(--r) - 9px));
+  }
+}
+
+/* ---------- Select labels ---------- */
+
+.labelTitle {
+  position: absolute;
+  left: 50%;
+  width: 222px;
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+/* Each phase parks its labels under its own arrangement of the windows. */
+/* Clear of the orbit's lowest point: the ring has to be wider than the fan for
+   the glyphs to stay visible past its edges, which pushes the labels down. */
+.overlaySelect .labelTitle {
+  top: 366px;
+}
+
+.overlaySelect .labelSub {
+  top: 391px;
+}
+
+.overlayScanning .labelTitle {
+  top: 276px;
+}
+
+.overlayScanning .labelSub {
+  top: 300px;
+}
+
+.labelTitle:focus {
+  outline: none;
+}
+
+/* The compacting frame runs the title through a left-to-right gradient, which
+   is what makes it read as in-progress rather than as a finished label. */
+.labelTitleRunning {
+  background: linear-gradient(to right, var(--text) 30%, var(--text-fade) 57%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* The frame specifies Inter Thin here. At 12px on a near-black canvas the
+   hairline strokes break up, so this keeps the quiet tone via colour and takes
+   the weight back to a readable one. */
+.labelSub {
+  position: absolute;
+  left: 50%;
+  width: 288px;
+  margin: 0;
+  color: var(--text-quiet);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+/* ---------- Settings ---------- */
+
+.settingsSummary {
+  position: absolute;
+  top: 274px;
+  left: 46px;
+  width: 420px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-label);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsSummary:focus {
+  outline: none;
+}
+
+.settingsNote {
+  position: absolute;
+  top: 293px;
+  left: 46px;
+  width: 420px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsPanel {
+  position: absolute;
+  top: 326px;
+  left: 46px;
+  display: flex;
+  width: 420px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.settingsRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+}
+
+.settingsText {
+  display: flex;
+  min-width: 0;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* Same pairing as the empty state's heading and sub-line, so a label reads the
+   same whichever phase you meet it in. */
+.settingsLabel {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.settingsHint {
+  overflow: hidden;
+  color: var(--text-quiet);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segment {
+  position: relative;
+  display: flex;
+  width: 153px;
+  flex-shrink: 0;
+  align-items: stretch;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+.segmentButton {
+  display: flex;
+  min-width: 0;
+  height: 24px;
+  flex: 1 0 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  transition:
+    background 160ms ease-out,
+    color 160ms ease-out;
+  white-space: nowrap;
+}
+
+/* `Base` is a word among digits, so it keeps a fixed slot instead of being
+   squeezed to a fifth of the track. */
+.segmentButtonWide {
+  flex: 0 0 51px;
+}
+
+.segmentButtonOnBlue {
+  background: var(--blue);
+  color: #ffffff;
+}
+
+/* "Off" is the absence of an output, so selecting it should not light up the
+   way choosing an actual colour format does — it still reads as selected, just
+   not as active. */
+.segmentButtonOnNeutral {
+  background: #3a3a3a;
+  color: var(--text);
+}
+
+.segmentButtonOnOrange {
+  background: var(--orange);
+  color: #ffffff;
+}
+
+.startButton {
+  position: absolute;
+  top: calc(50% + 210.5px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--sunken);
+  color: var(--text-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
   font-weight: 600;
+  transform: translate(-50%, -50%);
+  transition: background 160ms ease-out;
+  white-space: nowrap;
+}
+
+.startButton:hover {
+  background: #1e1e1e;
+}
+
+.startButton:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* ---------- Code window ---------- */
+
+.codeBody {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 16px;
+  gap: 12px;
+  overflow: hidden;
+  animation: content-in 0.35s ease-out both;
+}
+
+.codeHeader {
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.codeTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.codeTitleIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.codeTitleText {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codeTitleText:focus {
+  outline: none;
+}
+
+.codeActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.copyButton,
+.iconButton {
+  position: relative;
+  display: flex;
+  height: 33px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--text-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background 160ms ease-out,
+    border-color 160ms ease-out,
+    color 160ms ease-out;
+  white-space: nowrap;
+}
+
+.copyButton {
+  padding: 0 12px;
+  gap: 8px;
+}
+
+/* Square: these two are recognisable enough as glyphs that a label would only
+   crowd the header the filename shares. */
+.iconButton {
+  width: 33px;
+  padding: 0;
+  color: var(--text-dim);
+}
+
+.iconButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The export glyph is drawn small inside a 24-unit box, so shrinking that box
+   to 16px would leave it optically lighter than the 16-unit refresh icon. */
+.iconButtonWide svg {
+  width: 24px;
+  height: 24px;
+}
+
+.iconButton svg path {
+  fill: currentColor;
+}
+
+.iconButton:hover {
+  color: var(--text-strong);
+}
+
+.iconButton svg {
+  transition: transform 0.32s var(--ease-out);
+}
+
+.iconButtonSpin:hover svg {
+  transform: rotate(-180deg);
+}
+
+.copyButton:hover,
+.iconButton:hover {
+  background: #1a1a1a;
+}
+
+.copyButtonDone {
+  border-color: var(--scan);
+  color: var(--scan);
+}
+
+.copyIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.copyCheck {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  animation: icon-pop 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.codeSurface {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--code-bg);
+  /* Hidden while the typewriter runs — the reveal is the animation, so a
+     scrollbar racing down beside it would fight the effect. */
+  overflow: hidden;
+  scrollbar-color: #3a3a3a transparent;
+  scrollbar-width: thin;
+}
+
+.codeSurfaceDone {
+  overflow: auto;
+}
+
+.codeSurface:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.codeLines {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  /* Proportional Inter is what the frame mocks up, but the real payload is
+     positional YAML whose columns only line up in a monospace face. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 13px;
+  white-space: pre;
+}
+
+.codeLine {
+  display: block;
+  min-height: 13px;
+}
+
+.codeKeyword {
+  color: var(--code-keyword);
+}
+
+.codeKey {
+  color: var(--code-ident);
 }
 
 .codeComment {
   color: var(--code-comment);
 }
 
-.codeKey {
-  color: var(--code-key);
+.codeText {
+  color: var(--code-plain);
 }
 
-.actionRow {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 8px;
+.caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 11px;
+  margin-left: 1px;
+  background: var(--code-plain);
+  animation: blink 0.75s step-end infinite;
+  transform: translateY(1px);
 }
 
-.buttonContent {
-  display: inline-flex;
+/* ---------- Info ----------
+   Tucked into the corner rather than spelled out on the canvas: someone meeting
+   the plugin for the first time can ask what it does, and everyone else never
+   has to read it. */
+
+.infoButton {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  width: 26px;
+  height: 26px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-}
-
-.buttonIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* The tick that replaces the clipboard icon lands with a small pop. */
-.buttonIconPop {
-  animation: icon-pop var(--dur-3) var(--ease-spring) both;
-}
-
-/* ---------- Buttons ---------- */
-
-.primaryButton,
-.secondaryButton {
-  min-height: 32px !important;
-  border-radius: 8px !important;
-  font-size: 11px !important;
-  font-weight: 550 !important;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--sunken);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  animation: content-in 0.3s ease-out both;
   transition:
-    background var(--dur-1) ease-out,
-    border-color var(--dur-1) ease-out,
-    box-shadow var(--dur-2) var(--ease-out),
-    transform var(--dur-1) var(--ease-out) !important;
+    background 160ms ease-out,
+    border-color 160ms ease-out,
+    color 160ms ease-out;
 }
 
-.primaryButton {
-  border-color: var(--accent) !important;
-  background: var(--accent) !important;
-  color: var(--accent-on) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
+.infoButton svg {
+  width: 14px;
+  height: 14px;
 }
 
-.primaryButton:hover {
-  border-color: var(--accent-hover) !important;
-  background: var(--accent-hover) !important;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.14),
-    0 6px 16px -8px var(--accent-glow) !important;
-  transform: translateY(-1px);
+.infoButton svg path {
+  fill: currentColor;
 }
 
-.primaryButton:active {
-  border-color: var(--accent-active) !important;
-  background: var(--accent-active) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
-  transform: translateY(0) scale(0.99);
+.infoButton:hover {
+  border-color: #3a3a3a;
+  color: var(--text);
 }
 
-.secondaryButton {
-  border-color: var(--figma-color-border-strong, #c9c9c9) !important;
-  background: transparent !important;
-  color: var(--figma-color-text, #1e1e1e) !important;
+.infoButtonOpen {
+  border-color: var(--blue);
+  color: var(--blue);
 }
 
-.secondaryButton:hover {
-  background: var(--figma-color-bg-hover, #ededed) !important;
-  transform: translateY(-1px);
+.infoBubble {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 50px;
+  width: 272px;
+  padding: 12px 14px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sunken);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.75);
+  text-align: left;
+  animation: bubble-in 0.22s var(--ease-out) both;
 }
 
-.secondaryButton:active {
-  background: var(--figma-color-bg-pressed, #e0e0e0) !important;
-  transform: translateY(0) scale(0.99);
+/* Points back at the button it came from. */
+.infoBubble::after {
+  position: absolute;
+  right: 18px;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+  content: "";
+  transform: rotate(45deg);
 }
 
-.copiedButton {
-  border-color: var(--accent) !important;
-  background: var(--accent) !important;
-  animation: copied-flash var(--dur-4) var(--ease-out);
+.infoTitle {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
-/* ---------- Segmented control ----------
-   Sizing/colour only, layered over the component library's own styles so the
-   control matches the rest of the panel. */
-
-.optionControl label > div {
-  min-height: 26px !important;
-  border-radius: 6px !important;
-  font-size: 10px !important;
-  transition:
-    background var(--dur-1) ease-out,
-    color var(--dur-1) ease-out !important;
+.infoText {
+  margin: 0 0 8px;
+  color: var(--text-quiet);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 17px;
 }
 
-.optionControl input:checked + div {
-  background: var(--accent) !important;
-  color: var(--accent-on) !important;
+.infoText:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* ---------- Error ---------- */
 
 .errorBanner {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  right: 12px;
+  left: 12px;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
   padding: 9px 10px;
+  gap: 8px;
+  border: 1px solid rgba(255, 107, 107, 0.32);
   border-radius: 8px;
-  background: var(--figma-color-bg-danger-tertiary, #fff0ee);
-  color: var(--figma-color-text-danger, #d32f2f);
-  animation: banner-in var(--dur-4) var(--ease-spring) both;
+  background: rgba(40, 18, 18, 0.9);
+  color: var(--danger);
+  animation: banner-in 0.42s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
 .errorBannerIcon {
@@ -680,8 +1017,6 @@
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  align-items: center;
-  justify-content: center;
   margin-top: 1px;
 }
 
@@ -690,24 +1025,19 @@
   height: 16px;
 }
 
-.errorBanner strong,
-.errorBanner span {
-  display: block;
-}
-
 .errorBanner strong {
+  display: block;
   font-size: 11px;
   font-weight: 600;
   line-height: 15px;
 }
 
-/* Inherits the danger colour rather than the neutral secondary, which reads as
-   washed out against the banner's tint. */
 .errorBanner span {
+  display: block;
   margin-top: 2px;
   font-size: 10px;
   line-height: 14px;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .copyArea,
@@ -717,45 +1047,23 @@
   height: 1px;
   padding: 0;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
   border: 0;
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
 
 /* ---------- Keyframes ---------- */
 
-@keyframes view-in {
+@keyframes scanner-sweep {
   from {
-    opacity: 0;
+    left: -10%;
   }
   to {
-    opacity: 1;
+    left: 110%;
   }
 }
 
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes row-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes line-in {
+@keyframes content-in {
   from {
     opacity: 0;
   }
@@ -786,70 +1094,60 @@
   }
 }
 
-@keyframes copied-flash {
-  0% {
-    box-shadow: 0 0 0 0 var(--accent-glow);
-  }
-  60% {
-    box-shadow: 0 0 0 6px transparent;
-  }
+@keyframes blink {
+  0%,
   100% {
-    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
   }
-}
-
-@keyframes sheen {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes extracting-float {
-  from {
-    transform: translateY(2px) scale(0.995);
-  }
-  to {
-    transform: translateY(-4px) scale(1.005);
+  50% {
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .view,
-  .centeredState > *,
-  .readyState > *,
-  .resultState > *,
-  .selectionRow,
-  .codeLine,
-  .errorBanner,
-  .extractingIllustration,
-  .buttonIconPop,
-  .copiedButton,
-  .progressFill::after {
-    animation: none !important;
-  }
-
-  .progressFill,
-  .newButton,
-  .newButton svg,
-  .primaryButton,
-  .secondaryButton,
-  .selectionRow,
-  .optionControl label > div {
+  .card,
+  .overlay,
+  .cardBorder,
+  .segmentButton,
+  .startButton,
+  .copyButton,
+  .iconButton,
+  .iconButton svg,
+  .skeleton {
     transition: none !important;
   }
 
-  .primaryButton:hover,
-  .secondaryButton:hover,
-  .primaryButton:active,
-  .secondaryButton:active,
-  .newButton:active {
-    transform: none !important;
+  .orbit,
+  .orbitArm,
+  .orbitIcon,
+  .scanner,
+  .codeBody,
+  .errorBanner,
+  .infoButton,
+  .infoBubble,
+  .copyCheck,
+  .caret {
+    animation: none !important;
   }
 
-  .newButton:hover svg {
+  .scanner {
+    left: 50%;
+  }
+
+  .iconButtonSpin:hover svg {
     transform: none;
+  }
+
+  /* Parked at their starting angles rather than all collapsing onto one side. */
+  .orbit {
+    transform: rotate(var(--angle));
+  }
+
+  .orbitArm {
+    transform: translateX(var(--r));
+  }
+
+  .orbitIcon {
+    transform: rotate(calc(var(--angle) * -1));
   }
 }
