@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><link rel="stylesheet" href="_base.css" />
+<style>
+  .left { position: absolute; left: 132px; top: 300px; width: 720px; }
+  .left .brand { margin-bottom: 58px; }
+  h1 { font-size: 92px; }
+  .sub { font-size: 29px; line-height: 1.5; margin-top: 34px; max-width: 620px; }
+
+  /* Fan centre. Same construction as the plugin: equal rotation steps, equal
+     offsets, front card flat. */
+  .stage { position: absolute; left: 1392px; top: 524px; }
+  .card { position: absolute; width: 430px; height: 292px; margin: -146px 0 0 -215px; }
+  /* Dimmed and pushed further out, so the fan reads as three screens rather
+     than one smudged edge. */
+  .c1, .c2 { background: #1b1b1b; }
+  .c1 .skel, .c2 .skel { opacity: .55; }
+  .c1 { transform: translateX(-158px) translateY(14px) rotate(-12deg); z-index: 1; }
+  .c2 { transform: translateX(158px)  translateY(14px) rotate(12deg);  z-index: 2; }
+  .c3 { z-index: 3; box-shadow: 0 40px 90px rgba(0,0,0,.55); }
+  .orb { position: absolute; height: 44px; width: auto; transform: translate(-50%, -50%); }
+</style></head>
+<body><div class="bg"></div><div class="grain"></div><div class="wrap">
+
+  <div class="left">
+    <div class="brand">
+      <div class="mark"><div class="bar"><i></i><i></i><i></i></div><div class="body"><span></span><span></span></div></div>
+      <div class="wordmark">Screen Spec MD</div>
+    </div>
+    <h1>A compact spec<br />for agents.</h1>
+    <p class="sub">Your tokens, components and styles, mapped to the screens that use them.</p>
+  </div>
+
+  <div class="stage">
+    <div class="card win c1"><div class="bar"><i></i><i></i><i></i></div>
+      <div class="skel"><div class="rail"></div><div class="lines"><b></b><b></b><b></b><b></b><b></b></div></div></div>
+    <div class="card win c2"><div class="bar"><i></i><i></i><i></i></div>
+      <div class="skel"><div class="rail"></div><div class="lines"><b></b><b></b><b></b><b></b><b></b></div></div></div>
+    <div class="card win c3"><div class="bar"><i></i><i></i><i></i></div>
+      <div class="skel"><div class="rail"></div><div class="lines"><b></b><b></b><b></b><b></b><b></b></div></div></div>
+    <script>
+      const icons = ['icon-fit-to-screen','icon-cursor-edit','icon-screenshot','icon-terminal-accent',
+                     'icon-copy','icon-terminal-violet','icon-screenshot-amber','icon-copy-scan','icon-fit-to-screen-blue'];
+      const R = 470, stage = document.currentScript.parentElement;
+      icons.forEach((n, i) => {
+        const a = (i * 360 / icons.length - 90) * Math.PI / 180;
+        const el = document.createElement('img');
+        el.className = 'orb'; el.src = '../figma/' + n + '.svg';
+        el.style.left = Math.cos(a) * R + 'px';
+        el.style.top  = Math.sin(a) * R * 0.70 + 'px';
+        stage.appendChild(el);
+      });
+    </script>
+  </div>
+
+</div></body></html>

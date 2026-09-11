@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><link rel="stylesheet" href="_base.css" />
+<style>
+  .left { position: absolute; left: 132px; top: 318px; width: 600px; }
+  .left .brand { margin-bottom: 56px; }
+  h1 { font-size: 84px; }
+  .sub { font-size: 28px; line-height: 1.5; margin-top: 32px; max-width: 500px; }
+
+  .win { position: absolute; left: 856px; top: 132px; width: 932px; height: 816px;
+         box-shadow: 0 54px 120px rgba(0,0,0,.62); }
+  .pane { flex: 1; display: flex; flex-direction: column; gap: 26px; padding: 34px; min-height: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; flex: none; }
+  .title { display: flex; align-items: center; gap: 16px; }
+  .title img { width: 30px; height: 30px; display: block; }
+  .title span { font-size: 25px; font-weight: 600; color: #fafafa; }
+  .actions { display: flex; align-items: center; gap: 12px; }
+  .btn { height: 60px; border: 1px solid #2b2b2b; border-radius: 11px; background: #111; display: flex;
+         align-items: center; justify-content: center; gap: 14px; color: #fafafa; font-size: 22px; font-weight: 600; }
+  .btn.sq { width: 60px; }
+  .btn.sq img { width: 26px; height: 26px; opacity: .62; }
+  .btn.copy { padding: 0 22px; }
+  .btn.copy img { width: 26px; height: 26px; }
+  .code { flex: 1; min-height: 0; background: #111; border: 1px solid #2b2b2b; border-radius: 11px;
+          padding: 26px 28px; overflow: hidden;
+          font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+          font-size: 21px; line-height: 1.62; white-space: pre; }
+  .q  { color: #5c6370; }
+  .h  { color: #c678dd; font-weight: 600; }
+  .k  { color: #61afef; }
+  .t  { color: #d4d4d4; }
+  .s  { color: #e5c07b; }
+  .y  { color: #98c379; }
+</style></head>
+<body><div class="bg"></div><div class="grain"></div><div class="wrap">
+
+  <div class="left">
+    <div class="brand">
+      <div class="mark"><div class="bar"><i></i><i></i><i></i></div><div class="body"><span></span><span></span></div></div>
+      <div class="wordmark">Screen Spec MD</div>
+    </div>
+    <h1>One small<br />Markdown file.</h1>
+    <p class="sub">Everything your coding agent needs to rebuild the screen from your components.</p>
+  </div>
+
+  <div class="win">
+    <div class="bar"><i></i><i></i><i></i></div>
+    <div class="pane">
+      <div class="head">
+        <div class="title"><img src="../figma/icon-terminal.svg" alt="" /><span>screens.md</span></div>
+        <div class="actions">
+          <div class="btn copy"><img src="../figma/icon-copy.svg" alt="" />Copy</div>
+        </div>
+      </div>
+      <div class="code"><span class="q">&gt; A compact spec for agents. Read from the
+&gt; layer tree, not pixels.</span>
+
+<span class="h">## Screen 1 &#8212; 1440&#215;1024</span>
+
+<span class="q">```yaml
+# box: [x, y, w, h] in % of frame</span>
+<span class="k">screen:</span>
+<span class="t">  layout: col gap 24 align stretch</span>
+<span class="k">items:</span>
+<span class="k">  1:</span><span class="t"> { component: </span><span class="y">Sidebar</span><span class="t">, box: [0, 0, 4, 100] }</span>
+<span class="k">  2:</span><span class="t"> { role: heading, box: [28, 22, 21, 2],
+       text: </span><span class="s">Set lead assignment permission</span><span class="t"> }</span>
+<span class="k">  3:</span><span class="t"> { component: </span><span class="y">Button</span><span class="t">, box: [62, 29, 12, 4],
+       props: { Variant: </span><span class="s">Default</span><span class="t"> } }</span>
+<span class="k">  4:</span><span class="t"> { role: table, box: [28, 44, 62, 31], rows: 8 }</span></div>
+    </div>
+  </div>
+
+</div></body></html>
