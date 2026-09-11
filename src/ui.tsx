@@ -1,12 +1,13 @@
 import {
   IconCheck16,
   IconExportSmall24,
+  IconInfo16,
   IconRefresh16,
   IconWarningSmall24,
   render
 } from '@create-figma-plugin/ui'
 import { emit, on } from '@create-figma-plugin/utilities'
-import { RefObject, h } from 'preact'
+import { Fragment, RefObject, h } from 'preact'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks'
 
 import copyIcon from '../assets/figma/icon-copy.svg'
@@ -75,6 +76,7 @@ function Plugin() {
   // for them — otherwise switching frames would silently undo their choice.
   const [colorModeChosen, setColorModeChosen] = useState(false)
   const [componentDepth, setComponentDepth] = useState('Base')
+  const [infoOpen, setInfoOpen] = useState(false)
   const copyAreaRef = useRef<HTMLTextAreaElement>(null)
   const headingRef = useRef<HTMLElement>(null)
   // Wall-clock start of the current extraction, so the scan gets its full dwell
@@ -150,6 +152,34 @@ function Plugin() {
       headingRef.current?.focus()
     },
     [view]
+  )
+
+  // The panel belongs to the empty canvas, so leaving it takes the panel too.
+  useEffect(
+    function () {
+      if (phase !== 'select') {
+        setInfoOpen(false)
+      }
+    },
+    [phase]
+  )
+
+  useEffect(
+    function () {
+      if (!infoOpen) {
+        return
+      }
+      const onKey = function (event: KeyboardEvent) {
+        if (event.key === 'Escape') {
+          setInfoOpen(false)
+        }
+      }
+      window.addEventListener('keydown', onKey)
+      return function () {
+        window.removeEventListener('keydown', onKey)
+      }
+    },
+    [infoOpen]
   )
 
   useEffect(
@@ -324,6 +354,10 @@ function Plugin() {
           </h1>
           <p className={styles.labelSub}>Hold on tight!</p>
         </Overlay>
+
+        {phase === 'select' ? (
+          <InfoPanel onToggle={setInfoOpen} open={infoOpen} />
+        ) : null}
 
         {view === 'error' ? <ErrorBanner message={error} /> : null}
 
@@ -682,6 +716,73 @@ function prefersReducedMotion(): boolean {
   return (
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+function InfoPanel({
+  onToggle,
+  open
+}: {
+  onToggle: (open: boolean) => void
+  open: boolean
+}) {
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // Dismiss on a click anywhere else, the way a popover is expected to behave.
+  useEffect(
+    function () {
+      if (!open) {
+        return
+      }
+      const onDown = function (event: MouseEvent) {
+        const target = event.target as Node
+        if (
+          bubbleRef.current?.contains(target) === true ||
+          buttonRef.current?.contains(target) === true
+        ) {
+          return
+        }
+        onToggle(false)
+      }
+      document.addEventListener('mousedown', onDown)
+      return function () {
+        document.removeEventListener('mousedown', onDown)
+      }
+    },
+    [onToggle, open]
+  )
+
+  return (
+    <Fragment>
+      {open ? (
+        <div
+          className={styles.infoBubble}
+          id="info-bubble"
+          ref={bubbleRef}
+          role="dialog"
+        >
+          <p className={styles.infoTitle}>A compact spec for agents.</p>
+          <p className={styles.infoText}>
+            Your tokens, components and styles, mapped to the screens that use
+            them. Compacted into one small file your coding agent can act on.
+          </p>
+        </div>
+      ) : null}
+      <button
+        aria-controls="info-bubble"
+        aria-expanded={open}
+        aria-label="What this plugin does"
+        className={styles.infoButton + (open ? ' ' + styles.infoButtonOpen : '')}
+        onClick={function () {
+          onToggle(!open)
+        }}
+        ref={buttonRef}
+        type="button"
+      >
+        <IconInfo16 />
+      </button>
+    </Fragment>
   )
 }
 

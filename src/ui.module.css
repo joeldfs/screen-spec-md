@@ -885,6 +885,114 @@
   transform: translateY(1px);
 }
 
+/* ---------- Info ----------
+   Tucked into the corner rather than spelled out on the canvas: someone meeting
+   the plugin for the first time can ask what it does, and everyone else never
+   has to read it. */
+
+.infoButton {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--sunken);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  animation: content-in 0.3s ease-out both;
+  transition:
+    background 160ms ease-out,
+    border-color 160ms ease-out,
+    color 160ms ease-out;
+}
+
+.infoButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.infoButton svg path {
+  fill: currentColor;
+}
+
+.infoButton:hover {
+  border-color: #3a3a3a;
+  color: var(--text);
+}
+
+.infoButtonOpen {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.infoBubble {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 50px;
+  width: 272px;
+  padding: 12px 14px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sunken);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.75);
+  text-align: left;
+  animation: bubble-in 0.22s var(--ease-out) both;
+}
+
+/* Points back at the button it came from. */
+.infoBubble::after {
+  position: absolute;
+  right: 18px;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.infoTitle {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.infoText {
+  margin: 0 0 8px;
+  color: var(--text-quiet);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+.infoText:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* ---------- Error ---------- */
 
 .errorBanner {
@@ -1015,6 +1123,8 @@
   .scanner,
   .codeBody,
   .errorBanner,
+  .infoButton,
+  .infoBubble,
   .copyCheck,
   .caret {
     animation: none !important;
