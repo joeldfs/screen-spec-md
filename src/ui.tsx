@@ -1,25 +1,37 @@
 import {
-  Button,
   IconCheck16,
-  IconClipboardSmall24,
   IconExportSmall24,
-  IconFrame16,
   IconRefresh16,
-  IconSection16,
   IconWarningSmall24,
-  SegmentedControl,
-  SegmentedControlOption,
   render
 } from '@create-figma-plugin/ui'
 import { emit, on } from '@create-figma-plugin/utilities'
-import { ComponentChildren, h, RefObject } from 'preact'
-import { useCallback, useEffect, useReducer, useRef, useState } from 'preact/hooks'
+import { RefObject, h } from 'preact'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks'
 
-import extractingIllustration from '../assets/illustration-extract-markdown.png'
-import selectIllustration from '../assets/illustration-select-frame.png'
+import copyIcon from '../assets/figma/icon-copy.svg'
+import copyScanAccent from '../assets/figma/icon-copy-scan.svg'
+import cursorAccent from '../assets/figma/icon-cursor-edit.svg'
+import fitBlueAccent from '../assets/figma/icon-fit-to-screen-blue.svg'
+import fitAccent from '../assets/figma/icon-fit-to-screen.svg'
+import screenshotAmberAccent from '../assets/figma/icon-screenshot-amber.svg'
+import screenshotAccent from '../assets/figma/icon-screenshot.svg'
+import terminalIcon from '../assets/figma/icon-terminal.svg'
+import terminalAccent from '../assets/figma/icon-terminal-accent.svg'
+import terminalVioletAccent from '../assets/figma/icon-terminal-violet.svg'
 import { createMarkdownBlob, getMarkdownExport } from './lib/export'
 import { buildMarkdown } from './lib/outline'
-import { getUiSize, initialUiModel, reduceUiModel } from './lib/ui-state'
+import {
+  GROW_MS,
+  MIN_COMPACTING_MS,
+  MIN_FAILURE_MS,
+  UiViewState,
+  componentDepthFromValue,
+  defaultColorMode,
+  getUiSize,
+  initialUiModel,
+  reduceUiModel
+} from './lib/ui-state'
 import styles from './ui.module.css'
 import {
   ColorMode,
@@ -35,36 +47,97 @@ import {
   UiReadyHandler
 } from './types'
 
-const colorOptions: Array<SegmentedControlOption> = [
-  { value: 'Off' },
-  { value: 'Tokens' },
-  { value: 'Hex' }
-]
+const colorOptions = ['Off', 'Tokens', 'Hex']
+const componentDepthOptions = ['Base', '1', '2', '3', '4']
+
+// The canvas phase, which is coarser than the view state: `error` reuses the
+// settings canvas and only adds a banner.
+type Phase = 'select' | 'settings' | 'scanning' | 'codeblock'
+
+function phaseFor(view: UiViewState): Phase {
+  if (view === 'extracting') {
+    return 'scanning'
+  }
+  if (view === 'result') {
+    return 'codeblock'
+  }
+  return view === 'empty' ? 'select' : 'settings'
+}
+
 function Plugin() {
   const [model, dispatch] = useReducer(reduceUiModel, initialUiModel)
   const [copied, setCopied] = useState(false)
-  const [colorMode, setColorMode] = useState<string>('Off')
+  // Split out of the phase: the front window starts growing while the scan is
+  // still the current view, so the expansion reads as one continuous move.
+  const [growing, setGrowing] = useState(false)
+  const [colorMode, setColorMode] = useState('Off')
+  // Once the user picks a Color output themselves, the selection stops choosing
+  // for them — otherwise switching frames would silently undo their choice.
+  const [colorModeChosen, setColorModeChosen] = useState(false)
+  const [componentDepth, setComponentDepth] = useState('Base')
   const copyAreaRef = useRef<HTMLTextAreaElement>(null)
-  const headingRef = useRef<HTMLHeadingElement>(null)
+  const headingRef = useRef<HTMLElement>(null)
+  // Wall-clock start of the current extraction, so the scan gets its full dwell
+  // even when the work itself finishes in a few milliseconds.
+  const startedAtRef = useRef(0)
+  const timersRef = useRef<Array<number>>([])
   const { error, markdown, progress, screens, selection, view } = model
+  const phase = phaseFor(view)
+  // The message handlers are registered once, so they read the live view from a
+  // ref rather than from their own stale closure.
+  const viewRef = useRef(view)
+  viewRef.current = view
 
   useEffect(function () {
-    const removeSelection = on<SelectionHandler>('SELECTION', function (nextSelection) {
-      dispatch({ type: 'selection', selection: nextSelection })
+    const clearTimers = function () {
+      for (const timer of timersRef.current) {
+        window.clearTimeout(timer)
+      }
+      timersRef.current = []
+    }
+    const after = function (delay: number, apply: () => void) {
+      timersRef.current.push(window.setTimeout(apply, delay))
+    }
+    const settleAfter = function (floor: number, apply: () => void) {
+      clearTimers()
+      after(Math.max(0, floor - (Date.now() - startedAtRef.current)), apply)
+    }
+    const removeSelection = on<SelectionHandler>('SELECTION', function (next) {
+      dispatch({ type: 'selection', selection: next })
     })
-    const removeProgress = on<ProgressHandler>('PROGRESS', function (nextProgress) {
-      dispatch({ type: 'progress', progress: nextProgress })
+    const removeProgress = on<ProgressHandler>('PROGRESS', function (next) {
+      dispatch({ type: 'progress', progress: next })
     })
     const removeScreens = on<ScreensHandler>('SCREENS', function (nextScreens) {
       const md = buildMarkdown(nextScreens)
-      dispatch({ type: 'success', screens: nextScreens, markdown: md })
-      setCopied(false)
+      const settle = function () {
+        dispatch({ type: 'success', screens: nextScreens, markdown: md })
+        setCopied(false)
+      }
+      // Only a scan in flight earns the grow choreography. Screens arriving from
+      // anywhere else would otherwise expand the window while the settings are
+      // still on top of it.
+      if (viewRef.current !== 'extracting') {
+        clearTimers()
+        setGrowing(false)
+        settle()
+        return
+      }
+      settleAfter(MIN_COMPACTING_MS, function () {
+        // Grow first, mount the file content once it has the room.
+        setGrowing(true)
+        after(GROW_MS, settle)
+      })
     })
     const removeError = on<ErrorHandler>('ERROR', function (message) {
-      dispatch({ type: 'failure', message })
+      settleAfter(MIN_FAILURE_MS, function () {
+        setGrowing(false)
+        dispatch({ type: 'failure', message })
+      })
     })
     emit<UiReadyHandler>('UI_READY')
     return function () {
+      clearTimers()
       removeSelection()
       removeProgress()
       removeScreens()
@@ -83,8 +156,26 @@ function Plugin() {
     function () {
       emit<ResizeHandler>('RESIZE', getUiSize(view, selection))
     },
-    [selection.frames.length, selection.ignoredCount, view]
+    [selection, view]
   )
+
+  // Token names are the more useful output whenever the file actually has them,
+  // so the selection sets the default and says nothing about it. Files with no
+  // bound colours fall back to Off rather than to a column of raw hex.
+  useEffect(
+    function () {
+      if (colorModeChosen) {
+        return
+      }
+      setColorMode(defaultColorMode(selection))
+    },
+    [colorModeChosen, selection]
+  )
+
+  const chooseColorMode = useCallback(function (value: string) {
+    setColorModeChosen(true)
+    setColorMode(value)
+  }, [])
 
   const handleGenerate = useCallback(
     function () {
@@ -92,10 +183,15 @@ function Plugin() {
         return
       }
       setCopied(false)
+      setGrowing(false)
+      startedAtRef.current = Date.now()
       dispatch({ type: 'start' })
-      emit<GenerateHandler>('GENERATE', colorMode.toLowerCase() as ColorMode)
+      emit<GenerateHandler>('GENERATE', {
+        colorMode: colorMode.toLowerCase() as ColorMode,
+        componentDepth: componentDepthFromValue(componentDepth)
+      })
     },
-    [colorMode, selection]
+    [colorMode, componentDepth, selection]
   )
 
   const handleCopy = useCallback(
@@ -129,52 +225,113 @@ function Plugin() {
   )
 
   const reset = useCallback(function () {
+    setGrowing(false)
     dispatch({ type: 'new' })
     setCopied(false)
   }, [])
 
   return (
     <div className={styles.app}>
-      <main className={styles.main}>
-        {view === 'empty' ? (
-          <EmptyState headingRef={headingRef} ignoredCount={selection.ignoredCount} />
-        ) : null}
-        {view === 'ready' ? (
-          <ReadyState
-            colorMode={colorMode}
-            headingRef={headingRef}
-            onColorModeChange={setColorMode}
-            onGenerate={handleGenerate}
-            selection={selection}
-          />
-        ) : null}
-        {view === 'extracting' ? (
-          <ExtractingState headingRef={headingRef} progress={progress} />
-        ) : null}
-        {view === 'result' ? (
-          <ResultState
-            copied={copied}
-            headingRef={headingRef}
-            markdown={markdown}
-            onCopy={handleCopy}
-            onDownload={function () {
-              triggerDownload(markdown)
-            }}
-            onNew={reset}
-            screens={screens}
-          />
-        ) : null}
-        {view === 'error' ? (
-          <ErrorState
-            colorMode={colorMode}
-            headingRef={headingRef}
-            message={error}
-            onColorModeChange={setColorMode}
-            onRetry={handleGenerate}
-            selection={selection}
-          />
-        ) : null}
-      </main>
+      <div className={styles.stage} data-growing={String(growing)} data-phase={phase}>
+        <Accents on={phase === 'select'} />
+
+        <Window className={styles.cardC} />
+        <Window className={styles.cardB} />
+        <Window className={styles.cardA}>
+          {view === 'result' ? null : <Skeleton />}
+          {phase === 'scanning' && !growing ? (
+            <span aria-hidden="true" className={styles.scanner} />
+          ) : null}
+          {view === 'result' ? (
+            <CodeWindow
+              copied={copied}
+              headingRef={headingRef}
+              markdown={markdown}
+              onCopy={handleCopy}
+              onDownload={function () {
+                triggerDownload(markdown)
+              }}
+              onNew={reset}
+            />
+          ) : null}
+        </Window>
+
+        <Overlay extra={styles.overlaySelect} on={phase === 'select'}>
+          <h1
+            className={styles.labelTitle}
+            ref={phase === 'select' ? (headingRef as RefObject<HTMLHeadingElement>) : undefined}
+            tabIndex={-1}
+          >
+            Select one or more screens
+          </h1>
+          <p className={styles.labelSub}>
+            {selection.ignoredCount > 0
+              ? ignoredNote(selection.ignoredCount)
+              : 'Frames, components, instances or sections'}
+          </p>
+        </Overlay>
+
+        <Overlay extra={styles.overlaySettings} on={phase === 'settings'}>
+          <h1
+            className={styles.settingsSummary}
+            ref={
+              phase === 'settings' ? (headingRef as RefObject<HTMLHeadingElement>) : undefined
+            }
+            tabIndex={-1}
+          >
+            {selectionTitle(selection)}
+          </h1>
+          <p className={styles.settingsNote}>{selectionNote(selection)}</p>
+          <div className={styles.settingsPanel}>
+            <SettingsRow
+              hint={colorHint(view, selection, colorModeChosen)}
+              label="Color output"
+              neutralValue="Off"
+              onChange={chooseColorMode}
+              options={colorOptions}
+              tone={styles.segmentButtonOnBlue}
+              value={colorMode}
+            />
+            <SettingsRow
+              hint="Levels of nested component detail."
+              label="Component depth"
+              onChange={setComponentDepth}
+              options={componentDepthOptions}
+              tone={styles.segmentButtonOnOrange}
+              value={componentDepth}
+              wideFirst
+            />
+          </div>
+          <button
+            className={styles.startButton}
+            disabled={selection.frames.length === 0}
+            onClick={handleGenerate}
+            type="button"
+          >
+            {view === 'error' ? 'Retry Scan' : 'Start Scan'}
+          </button>
+        </Overlay>
+
+        <Overlay extra={styles.overlayScanning} on={phase === 'scanning' && !growing}>
+          <h1
+            className={styles.labelTitle + ' ' + styles.labelTitleRunning}
+            ref={
+              phase === 'scanning' ? (headingRef as RefObject<HTMLHeadingElement>) : undefined
+            }
+            tabIndex={-1}
+          >
+            Compacting Screen specifications
+          </h1>
+          <p className={styles.labelSub}>Hold on tight!</p>
+        </Overlay>
+
+        {view === 'error' ? <ErrorBanner message={error} /> : null}
+
+        <span aria-live="polite" className={styles.liveRegion}>
+          {liveMessage(view, progress, screens, markdown, copied)}
+        </span>
+      </div>
+
       <textarea
         aria-hidden="true"
         className={styles.copyArea}
@@ -187,350 +344,457 @@ function Plugin() {
   )
 }
 
-function EmptyState({
-  headingRef,
-  ignoredCount
+function Overlay({
+  children,
+  extra,
+  on: isOn
 }: {
-  headingRef: RefObject<HTMLHeadingElement>
-  ignoredCount: number
+  children: preact.ComponentChildren
+  extra: string
+  on: boolean
 }) {
   return (
-    <section className={styles.centeredState + ' ' + styles.view}>
-      <Illustration src={selectIllustration} />
-      <StateTitle headingRef={headingRef}>Select a frame or section</StateTitle>
-      <p className={styles.stateBody}>
-        Choose one or more screen-sized frames or sections on the canvas. Your selection appears
-        here automatically.
-      </p>
-      {ignoredCount > 0 ? (
-        <p aria-live="polite" className={styles.quietNote}>
-          {ignoredCount +
-            ' unsupported ' +
-            (ignoredCount === 1 ? 'layer is' : 'layers are') +
-            ' selected.'}
-        </p>
-      ) : null}
-    </section>
+    <div
+      aria-hidden={!isOn}
+      className={styles.overlay + ' ' + extra + (isOn ? ' ' + styles.overlayOn : '')}
+    >
+      {children}
+    </div>
   )
 }
 
-function ReadyState({
-  colorMode,
-  headingRef,
-  onColorModeChange,
-  onGenerate,
-  selection
+function Window({
+  children,
+  className
 }: {
-  colorMode: string
-  headingRef: RefObject<HTMLHeadingElement>
-  onColorModeChange: (value: string) => void
-  onGenerate: () => void
-  selection: SelectionSummary
+  children?: preact.ComponentChildren
+  className: string
 }) {
-  const title =
-    selection.frames.length === 1
-      ? selection.frames[0].name
-      : String(selection.frames.length) + ' screens selected'
   return (
-    <section className={styles.readyState + ' ' + styles.view}>
-      <div>
-        <p className={styles.stateKicker}>Selection</p>
-        <StateTitle headingRef={headingRef} left>
-          Ready to export
-        </StateTitle>
-        <p className={styles.selectionSummary}>{title}</p>
-      </div>
-      <SelectionCard selection={selection} />
-      <ColorOption
-        colorMode={colorMode}
-        hint="Token names, with hex fallback."
-        onColorModeChange={onColorModeChange}
-      />
-      <div className={styles.ctaSlot}>
-        <Button className={styles.primaryButton} fullWidth onClick={onGenerate}>
-          Create screens.md
-        </Button>
-      </div>
-    </section>
+    <div className={styles.card + ' ' + className}>
+      <span aria-hidden="true" className={styles.cardBar}>
+        <span className={styles.cardDot} />
+        <span className={styles.cardDot} />
+        <span className={styles.cardDot} />
+      </span>
+      {children}
+      <span aria-hidden="true" className={styles.cardBorder} />
+    </div>
   )
 }
 
-function ColorOption({
-  colorMode,
+function Skeleton() {
+  return (
+    <span aria-hidden="true" className={styles.skeleton}>
+      <span className={styles.skeletonRail} />
+      <span className={styles.skeletonBody}>
+        <span className={styles.skeletonBar} />
+        <span className={styles.skeletonBar} />
+        <span className={styles.skeletonBar} />
+        <span className={styles.skeletonBar} />
+        <span className={styles.skeletonBar} />
+      </span>
+    </span>
+  )
+}
+
+// Nested rings rather than one: a single radius would read as a carousel. Sizes
+// and speeds are deliberately uneven so the field never lines back up, and the
+// widest ellipse still clears the labels below the cards.
+// One ring, one radius, one size, one period: nine glyphs spaced a ninth of a
+// turn apart, so the gap between neighbours never changes. Only the glyph
+// differs — the geometry is identical for all of them.
+const ORBIT_RADIUS = 155
+const ORBIT_SIZE = 18
+const ORBIT_PERIOD = 34
+
+const ORBIT_ICONS: Array<string> = [
+  fitAccent,
+  cursorAccent,
+  screenshotAccent,
+  terminalAccent,
+  copyIcon,
+  terminalVioletAccent,
+  screenshotAmberAccent,
+  copyScanAccent,
+  fitBlueAccent
+]
+
+function Accents({ on: isOn }: { on: boolean }) {
+  const step = 360 / ORBIT_ICONS.length
+  return (
+    <div
+      aria-hidden="true"
+      className={styles.orbitField + (isOn ? ' ' + styles.orbitFieldOn : '')}
+    >
+      {ORBIT_ICONS.map(function (src, index) {
+        const angle = index * step
+        return (
+          <span
+            className={styles.orbit}
+            key={src}
+            style={{
+              '--dur': ORBIT_PERIOD + 's',
+              // A negative delay starts the ring already that far around, which
+              // is what spaces the glyphs instead of launching them together.
+              '--phase': (-(angle / 360) * ORBIT_PERIOD).toFixed(2) + 's',
+              '--r': ORBIT_RADIUS + 'px',
+              '--size': ORBIT_SIZE + 'px',
+              '--angle': angle + 'deg'
+            }}
+          >
+            <span className={styles.orbitArm}>
+              <img alt="" className={styles.orbitIcon} src={src} />
+            </span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function SettingsRow({
   hint,
-  onColorModeChange
+  label,
+  onChange,
+  neutralValue,
+  options,
+  tone,
+  value,
+  wideFirst
 }: {
-  colorMode: string
   hint: string
-  onColorModeChange: (value: string) => void
+  label: string
+  neutralValue?: string
+  onChange: (value: string) => void
+  options: Array<string>
+  tone: string
+  value: string
+  wideFirst?: boolean
 }) {
+  const name = label.replace(/\s+/g, '-').toLowerCase()
   return (
-    <div aria-labelledby="color-output-label" className={styles.optionGroup} role="group">
-      <div className={styles.optionHeading}>
-        <span className={styles.optionLabel} id="color-output-label">
-          Color output
-        </span>
-        <span className={styles.optionHint}>{hint}</span>
+    <div aria-label={label} className={styles.settingsRow} role="radiogroup">
+      <div className={styles.settingsText}>
+        <span className={styles.settingsLabel}>{label}</span>
+        <span className={styles.settingsHint}>{hint}</span>
       </div>
-      <div className={styles.optionControl}>
-        <SegmentedControl
-          options={colorOptions}
-          value={colorMode}
-          onValueChange={onColorModeChange}
-        />
+      <div className={styles.segment}>
+        {options.map(function (option, index) {
+          const selected = option === value
+          return (
+            <button
+              aria-checked={selected}
+              className={
+                styles.segmentButton +
+                (wideFirst === true && index === 0 ? ' ' + styles.segmentButtonWide : '') +
+                (selected
+                  ? ' ' + (option === neutralValue ? styles.segmentButtonOnNeutral : tone)
+                  : '')
+              }
+              key={name + '-' + option}
+              onClick={function () {
+                onChange(option)
+              }}
+              role="radio"
+              type="button"
+            >
+              {option}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function SelectionCard({ selection }: { selection: SelectionSummary }) {
-  // Both overflow facts share one footer row: two stacked notes read as clutter
-  // in a card this small.
-  const notes: Array<string> = []
-  if (selection.frames.length > 3) {
-    notes.push('+' + (selection.frames.length - 3) + ' more')
-  }
-  if (selection.ignoredCount > 0) {
-    notes.push(
-      selection.ignoredCount +
-        ' unsupported ' +
-        (selection.ignoredCount === 1 ? 'layer' : 'layers') +
-        ' ignored'
-    )
-  }
-  return (
-    <div aria-live="polite" className={styles.selectionList}>
-      {selection.frames.slice(0, 3).map((frame) => (
-        <div className={styles.selectionRow} key={frame.id}>
-          <span aria-hidden="true" className={styles.selectionIcon}>
-            {frame.type === 'FRAME' ? <IconFrame16 /> : <IconSection16 />}
-          </span>
-          <span className={styles.selectionName}>{frame.name}</span>
-          <span className={styles.selectionSize}>
-            {Math.round(frame.width) + '×' + Math.round(frame.height)}
-          </span>
-        </div>
-      ))}
-      {notes.length > 0 ? (
-        <div className={styles.selectionNote}>{notes.join(' · ')}</div>
-      ) : null}
-    </div>
-  )
-}
-
-function ExtractingState({
-  headingRef,
-  progress
-}: {
-  headingRef: RefObject<HTMLHeadingElement>
-  progress: ExtractionProgress | null
-}) {
-  const current = progress?.current ?? 1
-  const total = progress?.total ?? 1
-  const percent = Math.max(8, Math.min(100, Math.round((current / total) * 100)))
-  const text =
-    'Extracting frame ' +
-    current +
-    ' of ' +
-    total +
-    (progress?.frameName ? ' · ' + progress.frameName : '')
-  return (
-    <section className={styles.centeredState + ' ' + styles.view}>
-      <Illustration extracting src={extractingIllustration} />
-      <StateTitle headingRef={headingRef}>Building screens.md</StateTitle>
-      <p aria-live="polite" className={styles.stateBody}>
-        {text}
-      </p>
-      <div
-        aria-label={'Extraction progress: ' + percent + '%'}
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={percent}
-        className={styles.progressTrack}
-        role="progressbar"
-      >
-        <span className={styles.progressFill} style={{ width: percent + '%' }} />
-      </div>
-    </section>
-  )
-}
-
-function ResultState({
+function CodeWindow({
   copied,
   headingRef,
   markdown,
   onCopy,
   onDownload,
-  onNew,
-  screens
+  onNew
 }: {
   copied: boolean
-  headingRef: RefObject<HTMLHeadingElement>
+  headingRef: RefObject<HTMLElement>
   markdown: string
   onCopy: () => void
   onDownload: () => void
   onNew: () => void
-  screens: Array<ScreenData>
 }) {
-  const itemCount = screens.reduce((sum, screen) => sum + screen.elements.length, 0)
-  const stats =
-    screens.length +
-    ' ' +
-    (screens.length === 1 ? 'screen' : 'screens') +
-    ' · ' +
-    itemCount +
-    ' items · ' +
-    formatBytes(markdown.length)
+  const { lines, done } = useTypewriter(markdown)
   return (
-    <section className={styles.resultState + ' ' + styles.view}>
-      <div className={styles.resultHeadingRow}>
-        <div className={styles.resultHeading}>
-          <StateTitle headingRef={headingRef} left>
+    <div className={styles.codeBody}>
+      <div className={styles.codeHeader}>
+        <div className={styles.codeTitle}>
+          <img alt="" className={styles.codeTitleIcon} src={terminalIcon} />
+          <h1
+            className={styles.codeTitleText}
+            ref={headingRef as RefObject<HTMLHeadingElement>}
+            tabIndex={-1}
+          >
             screens.md
-          </StateTitle>
-          <p className={styles.resultMeta}>{stats}</p>
+          </h1>
         </div>
-        <button className={styles.newButton} onClick={onNew} type="button">
-          <IconRefresh16 />
-          New
-        </button>
-      </div>
-      <div className={styles.fileWindow}>
-        <CodePreview markdown={markdown} />
-      </div>
-      <div className={styles.actionRow}>
-        <Button
-          className={styles.primaryButton + (copied ? ' ' + styles.copiedButton : '')}
-          fullWidth
-          onClick={onCopy}
-        >
-          <span className={styles.buttonContent}>
-            <span
-              className={styles.buttonIcon + (copied ? ' ' + styles.buttonIconPop : '')}
-              key={copied ? 'copied' : 'idle'}
-            >
-              {copied ? <IconCheck16 /> : <IconClipboardSmall24 />}
-            </span>
-            {copied ? 'Copied' : 'Copy Markdown'}
-          </span>
-        </Button>
-        <Button className={styles.secondaryButton} fullWidth onClick={onDownload} secondary>
-          <span className={styles.buttonContent}>
+        <div className={styles.codeActions}>
+          <button
+            aria-label="Start a new extraction"
+            className={styles.iconButton + ' ' + styles.iconButtonSpin}
+            onClick={onNew}
+            title="New extraction"
+            type="button"
+          >
+            <IconRefresh16 />
+          </button>
+          <button
+            aria-label="Download screens.md"
+            className={styles.iconButton + ' ' + styles.iconButtonWide}
+            onClick={onDownload}
+            title="Download screens.md"
+            type="button"
+          >
             <IconExportSmall24 />
-            Download .md
-          </span>
-        </Button>
-      </div>
-      <span aria-live="polite" className={styles.liveRegion}>
-        {copied ? 'Markdown copied to the clipboard.' : ''}
-      </span>
-    </section>
-  )
-}
-
-function ErrorState({
-  colorMode,
-  headingRef,
-  message,
-  onColorModeChange,
-  onRetry,
-  selection
-}: {
-  colorMode: string
-  headingRef: RefObject<HTMLHeadingElement>
-  message: string
-  onColorModeChange: (value: string) => void
-  onRetry: () => void
-  selection: SelectionSummary
-}) {
-  const title =
-    selection.frames.length === 1
-      ? selection.frames[0].name
-      : selection.frames.length + ' screens selected'
-
-  return (
-    <section className={styles.readyState + ' ' + styles.view}>
-      <div>
-        <p className={styles.stateKicker}>Selection</p>
-        <StateTitle headingRef={headingRef} left>
-          Ready to export
-        </StateTitle>
-        <p className={styles.selectionSummary}>{title}</p>
-      </div>
-      <div className={styles.errorBanner} role="alert">
-        <span aria-hidden="true" className={styles.errorBannerIcon}>
-          <IconWarningSmall24 />
-        </span>
-        <div>
-          <strong>Extraction stopped</strong>
-          <span>{message}</span>
+          </button>
+          <button
+            className={styles.copyButton + (copied ? ' ' + styles.copyButtonDone : '')}
+            onClick={onCopy}
+            type="button"
+          >
+            {copied ? (
+              <span className={styles.copyCheck}>
+                <IconCheck16 />
+              </span>
+            ) : (
+              <img alt="" className={styles.copyIcon} src={copyIcon} />
+            )}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
         </div>
       </div>
-      <SelectionCard selection={selection} />
-      <ColorOption
-        colorMode={colorMode}
-        hint="Your settings are unchanged."
-        onColorModeChange={onColorModeChange}
-      />
-      <div className={styles.ctaSlot}>
-        <Button className={styles.primaryButton} fullWidth onClick={onRetry}>
-          Retry extraction
-        </Button>
-      </div>
-    </section>
-  )
-}
-
-function Illustration({ extracting, src }: { extracting?: boolean; src: string }) {
-  return (
-    <span aria-hidden="true" className={styles.illustrationWrap}>
-      <img
-        alt=""
-        className={styles.illustration + (extracting ? ' ' + styles.extractingIllustration : '')}
-        src={src}
-      />
-    </span>
-  )
-}
-
-function StateTitle({
-  children,
-  headingRef,
-  left
-}: {
-  children: ComponentChildren
-  headingRef: RefObject<HTMLHeadingElement>
-  left?: boolean
-}) {
-  return (
-    <h1 className={left ? styles.stateTitleLeft : styles.stateTitle} ref={headingRef} tabIndex={-1}>
-      {children}
-    </h1>
-  )
-}
-
-function CodePreview({ markdown }: { markdown: string }) {
-  return (
-    <div aria-label="Generated Markdown preview" className={styles.codePreview} tabIndex={0}>
-      {markdown.split('\n').map((line, index) => (
-        <div
-          className={styles.codeLine}
-          key={String(index) + '-' + line}
-          style={{ '--line-index': index }}
-        >
-          <span aria-hidden="true" className={styles.lineNumber}>
-            {index + 1}
-          </span>
-          <code className={codeTone(line)}>{line || ' '}</code>
+      <div
+        aria-label="Generated Markdown"
+        className={styles.codeSurface + (done ? ' ' + styles.codeSurfaceDone : '')}
+        tabIndex={0}
+      >
+        <div className={styles.codeLines}>
+          {lines.map(function (line, index) {
+            return (
+              <code className={styles.codeLine + ' ' + codeTone(line)} key={index}>
+                {line || ' '}
+                {!done && index === lines.length - 1 ? (
+                  <i aria-hidden="true" className={styles.caret} />
+                ) : null}
+              </code>
+            )
+          })}
         </div>
-      ))}
+      </div>
     </div>
   )
 }
 
+// Roughly the prototype's 8ms per character, but the real payload is a whole
+// spec rather than thirteen mocked lines, so the run is capped: a long file
+// types faster instead of making the plugin wait on an animation.
+const MS_PER_CHAR = 8
+const MAX_TYPING_MS = 2800
+
+function useTypewriter(text: string): { lines: Array<string>; done: boolean } {
+  const allLines = useMemo(
+    function () {
+      return text.split('\n')
+    },
+    [text]
+  )
+  // Index of the first character of each line, plus a terminating total, so a
+  // frame only has to slice the one line the cursor is inside.
+  const offsets = useMemo(
+    function () {
+      const result: Array<number> = []
+      let at = 0
+      for (const line of allLines) {
+        result.push(at)
+        at += line.length + 1
+      }
+      result.push(at)
+      return result
+    },
+    [allLines]
+  )
+
+  const instant = text.length === 0 || prefersReducedMotion()
+  const [revealed, setRevealed] = useState(instant ? text.length : 0)
+
+  useEffect(
+    function () {
+      if (instant) {
+        setRevealed(text.length)
+        return
+      }
+      setRevealed(0)
+      const total = text.length
+      const duration = Math.min(MAX_TYPING_MS, total * MS_PER_CHAR)
+      const started = performance.now()
+      let frame = 0
+      const step = function (now: number) {
+        const ratio = Math.min(1, (now - started) / duration)
+        setRevealed(Math.floor(ratio * total))
+        if (ratio < 1) {
+          frame = requestAnimationFrame(step)
+        } else {
+          setRevealed(total)
+        }
+      }
+      frame = requestAnimationFrame(step)
+      return function () {
+        cancelAnimationFrame(frame)
+      }
+    },
+    [instant, text]
+  )
+
+  const done = revealed >= text.length
+  const lines = useMemo(
+    function () {
+      if (done) {
+        return allLines
+      }
+      let low = 0
+      let high = allLines.length - 1
+      while (low < high) {
+        const mid = (low + high + 1) >> 1
+        if (offsets[mid] <= revealed) {
+          low = mid
+        } else {
+          high = mid - 1
+        }
+      }
+      return allLines.slice(0, low).concat(allLines[low].slice(0, revealed - offsets[low]))
+    },
+    [allLines, done, offsets, revealed]
+  )
+
+  return { lines, done }
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className={styles.errorBanner} role="alert">
+      <span aria-hidden="true" className={styles.errorBannerIcon}>
+        <IconWarningSmall24 />
+      </span>
+      <div>
+        <strong>Extraction stopped</strong>
+        <span>{message}</span>
+      </div>
+    </div>
+  )
+}
+
+// The Color output default is set from the selection rather than by the user,
+// so the hint is where that gets said out loud — otherwise "Tokens" would just
+// appear pre-selected with no explanation.
+function colorHint(
+  view: UiViewState,
+  selection: SelectionSummary,
+  chosen: boolean
+): string {
+  if (view === 'error') {
+    return 'Your settings are unchanged.'
+  }
+  if (!chosen && selection.hasColorTokens) {
+    return 'Token names found in this selection.'
+  }
+  if (!chosen && selection.frames.length > 0) {
+    return 'No bound colour tokens found here.'
+  }
+  return 'Token names, with hex fallback.'
+}
+
+function selectionTitle(selection: SelectionSummary): string {
+  if (selection.frames.length === 0) {
+    return 'Nothing selected'
+  }
+  return selection.frames.length === 1
+    ? selection.frames[0].name
+    : selection.frames.length + ' screens selected'
+}
+
+function selectionNote(selection: SelectionSummary): string {
+  const notes: Array<string> = []
+  if (selection.frames.length > 1) {
+    notes.push(
+      selection.frames
+        .slice(0, 2)
+        .map(function (frame) {
+          return frame.name
+        })
+        .join(' · ') + (selection.frames.length > 2 ? ' +' + (selection.frames.length - 2) : '')
+    )
+  } else if (selection.frames.length === 1) {
+    const frame = selection.frames[0]
+    notes.push(Math.round(frame.width) + '×' + Math.round(frame.height))
+  }
+  if (selection.ignoredCount > 0) {
+    notes.push(ignoredNote(selection.ignoredCount))
+  }
+  return notes.join(' · ')
+}
+
+function ignoredNote(count: number): string {
+  return count + ' unsupported ' + (count === 1 ? 'layer' : 'layers') + ' ignored'
+}
+
+function liveMessage(
+  view: UiViewState,
+  progress: ExtractionProgress | null,
+  screens: Array<ScreenData>,
+  markdown: string,
+  copied: boolean
+): string {
+  if (copied) {
+    return 'Markdown copied to the clipboard.'
+  }
+  if (view === 'extracting') {
+    // The canvas shows "Hold on tight!", so the per-frame progress the designs
+    // leave out is announced here rather than dropped.
+    const current = progress?.current ?? 1
+    const total = progress?.total ?? 1
+    return (
+      'Extracting screen ' +
+      current +
+      ' of ' +
+      total +
+      (progress?.frameName ? ' · ' + progress.frameName : '')
+    )
+  }
+  if (view === 'result') {
+    const items = screens.reduce(function (sum, screen) {
+      return sum + screen.elements.length
+    }, 0)
+    return (
+      'screens.md ready · ' +
+      screens.length +
+      (screens.length === 1 ? ' screen · ' : ' screens · ') +
+      items +
+      ' items · ' +
+      formatBytes(markdown.length)
+    )
+  }
+  return ''
+}
+
 function codeTone(line: string): string {
   if (line.startsWith('## ')) {
-    return styles.codeHeading
+    return styles.codeKeyword
   }
   // `>` is the interpretation guide: prose about the spec, not the spec itself.
   if (line.startsWith('#') || line.startsWith('>') || line.charCodeAt(0) === 96) {
@@ -543,7 +807,9 @@ function codeTone(line: string): string {
 }
 
 function formatBytes(characters: number): string {
-  return characters < 1000 ? String(characters) + ' B' : (characters / 1000).toFixed(1) + ' KB'
+  return characters < 1000
+    ? String(characters) + ' B'
+    : (characters / 1000).toFixed(1) + ' KB'
 }
 
 function triggerDownload(markdown: string): void {

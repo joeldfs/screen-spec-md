@@ -1,5 +1,5 @@
 /// <reference types="@figma/plugin-typings" />
-import { Box, ColorMode, Element, Role } from '../types'
+import { Box, ColorMode, ComponentDepth, Element, Role } from '../types'
 
 // Read the layer tree of a selected frame into a FLAT list of leaf Elements,
 // each with a box (px, relative to the frame's top-left). The wireframe renderer
@@ -22,6 +22,7 @@ interface Ctx {
   originX: number
   originY: number
   instanceNames: Map<string, string>
+  instanceKeys: Map<string, string>
   // styleId → role, resolved from named text styles (e.g. "Desktop/Body" → body).
   // A device-independent role signal that augments font-size ranking.
   textStyleRoles: Map<string, Role>
@@ -33,7 +34,8 @@ interface Ctx {
 
 export async function extractScreen(
   frame: SceneNode,
-  colorMode: ColorMode
+  colorMode: ColorMode,
+  componentDepth: ComponentDepth = 0
 ): Promise<{
   elements: Array<Element>
   frameWidth: number
@@ -42,7 +44,10 @@ export async function extractScreen(
   padding?: Element['padding']
   overflow?: Element['overflow']
 }> {
-  const instanceNames = await resolveInstanceNames(frame)
+  const { instanceNames, instanceKeys } = await resolveInstanceMetadata(
+    frame,
+    componentDepth
+  )
   const textStyleRoles = await resolveTextStyleRoles(frame)
   const { variableNames, colorStyleNames } = await resolveColorTokens(
     frame,
@@ -53,19 +58,20 @@ export async function extractScreen(
       ? frame.absoluteBoundingBox
       : { x: 0, y: 0, width: geom(frame).w, height: geom(frame).h }
   const ctx: Ctx = {
-    maxTextSize: collectMaxTextSize(frame),
+    maxTextSize: collectMaxTextSize(frame, componentDepth),
     frameWidth: bounds.width,
     frameHeight: bounds.height,
     originX: bounds.x,
     originY: bounds.y,
     instanceNames,
+    instanceKeys,
     textStyleRoles,
     colorMode,
     variableNames,
     colorStyleNames
   }
   const out: Array<Element> = []
-  emitContainer(frame, ctx, 0, out, undefined)
+  emitContainer(frame, ctx, 0, out, undefined, componentDepth)
   const cleaned = dropDefaultTextColor(
     dropNestedVisuals(dropChartLabels(mergeIconLabels(out)))
   )
@@ -86,7 +92,8 @@ function emit(
   ctx: Ctx,
   depth: number,
   out: Array<Element>,
-  parentSourceNodeId: string | undefined
+  parentSourceNodeId: string | undefined,
+  componentDepth: number
 ): void {
   if (!isVisible(node) || depth > 12) {
     return
@@ -107,6 +114,30 @@ function emit(
     case 'INSTANCE': {
       const box = boxOf(node, ctx)
       if (isDecorative(node) || box.w < MIN_SIZE || box.h < MIN_SIZE) {
+        return
+      }
+      if (componentDepth > 0) {
+        const boundaryIndex = out.length
+        pushElement(
+          out,
+          node,
+          parentSourceNodeId,
+          expandedInstanceElement(node, ctx)
+        )
+        emitContainer(
+          node,
+          ctx,
+          depth,
+          out,
+          node.id,
+          componentDepth - 1
+        )
+        // An instance whose visible contents are entirely filtered is more useful
+        // as the existing atomic summary than as an empty expanded boundary.
+        if (out.length === boundaryIndex + 1) {
+          out.splice(boundaryIndex, 1)
+          pushElement(out, node, parentSourceNodeId, instanceElement(node, ctx))
+        }
         return
       }
       pushElement(out, node, parentSourceNodeId, instanceElement(node, ctx))
@@ -188,10 +219,10 @@ function emit(
           padding: paddingOf(node),
           overflow: overflowOf(node)
         })
-        emitContainer(node, ctx, depth, out, node.id)
+        emitContainer(node, ctx, depth, out, node.id, componentDepth)
         return
       }
-      emitContainer(node, ctx, depth, out, parentSourceNodeId)
+      emitContainer(node, ctx, depth, out, parentSourceNodeId, componentDepth)
       return
     }
     default:
@@ -204,7 +235,8 @@ function emitContainer(
   ctx: Ctx,
   depth: number,
   out: Array<Element>,
-  parentSourceNodeId: string | undefined
+  parentSourceNodeId: string | undefined,
+  componentDepth: number
 ): void {
   const kids = childrenOf(node).filter(isVisible)
   if (kids.length === 0) {
@@ -214,18 +246,25 @@ function emitContainer(
   const vertical = 'layoutMode' in node && node.layoutMode === 'VERTICAL'
 
   if (horizontal && kids.length > 1) {
-    emitGroup(sortByX(kids), ctx, depth, out, parentSourceNodeId)
+    emitGroup(
+      sortByX(kids),
+      ctx,
+      depth,
+      out,
+      parentSourceNodeId,
+      componentDepth
+    )
     return
   }
   if (vertical) {
     for (const kid of kids) {
-      emit(kid, ctx, depth + 1, out, parentSourceNodeId)
+      emit(kid, ctx, depth + 1, out, parentSourceNodeId, componentDepth)
     }
     return
   }
   // No / grid layout: reconstruct reading rows from geometry.
   for (const group of groupRows(kids)) {
-    emitGroup(group, ctx, depth, out, parentSourceNodeId)
+    emitGroup(group, ctx, depth, out, parentSourceNodeId, componentDepth)
   }
 }
 
@@ -235,10 +274,11 @@ function emitGroup(
   ctx: Ctx,
   depth: number,
   out: Array<Element>,
-  parentSourceNodeId: string | undefined
+  parentSourceNodeId: string | undefined,
+  componentDepth: number
 ): void {
   if (group.length === 1) {
-    emit(group[0], ctx, depth, out, parentSourceNodeId)
+    emit(group[0], ctx, depth, out, parentSourceNodeId, componentDepth)
     return
   }
   if (group.every((node) => !hasContent(node))) {
@@ -282,7 +322,7 @@ function emitGroup(
       }
       continue
     }
-    emit(node, ctx, depth + 1, out, parentSourceNodeId)
+    emit(node, ctx, depth + 1, out, parentSourceNodeId, componentDepth)
   }
 }
 
@@ -308,6 +348,8 @@ function instanceElement(node: InstanceNode, ctx: Ctx): Element {
   return {
     role: 'component',
     component: name,
+    componentKey: ctx.instanceKeys.get(node.id) ?? name,
+    componentSignature: instancePropertySignature(node),
     props: variantProps(node),
     text: label.length > 0 ? label : undefined,
     icons: icons.length > 0 ? icons : undefined,
@@ -315,6 +357,43 @@ function instanceElement(node: InstanceNode, ctx: Ctx): Element {
     rounded: isRoundedShape(node),
     color: colorOf(node, ctx)
   }
+}
+
+function expandedInstanceElement(node: InstanceNode, ctx: Ctx): Element {
+  const atomic = instanceElement(node, ctx)
+  return {
+    role: atomic.role,
+    component: atomic.component,
+    componentKey: atomic.componentKey,
+    componentSignature: atomic.componentSignature,
+    expandedComponent: true,
+    props: atomic.props,
+    box: atomic.box,
+    rounded: atomic.rounded,
+    color: atomic.color,
+    layout: layoutIntent(node),
+    padding: paddingOf(node),
+    overflow: overflowOf(node)
+  }
+}
+
+function instancePropertySignature(node: InstanceNode): string | undefined {
+  let properties: InstanceNode['componentProperties']
+  try {
+    properties = node.componentProperties
+  } catch {
+    return undefined
+  }
+  if (properties === undefined) {
+    return undefined
+  }
+  const entries = Object.keys(properties)
+    .sort()
+    .map((key) => {
+      const property = properties![key]
+      return [key, property.type, property.value]
+    })
+  return entries.length > 0 ? JSON.stringify(entries) : undefined
 }
 
 // The variant-axis selections on an instance (e.g. size=lg, state=default) — the
@@ -1269,7 +1348,15 @@ function isBold(node: TextNode): boolean {
       return false
     }
   }
-  return /bold|semibold|black|heavy|medium/.test((font as FontName).style.toLowerCase())
+  return /bold|semibold|black|heavy|medium/.test(normalizedFontStyle(font))
+}
+
+function normalizedFontStyle(font: FontName | symbol | undefined): string {
+  if (typeof font !== 'object' || font === null) {
+    return ''
+  }
+  const style = (font as { style?: unknown }).style
+  return typeof style === 'string' ? style.toLowerCase() : ''
 }
 
 function isAllCaps(text: string): boolean {
@@ -1554,6 +1641,48 @@ function hasVisiblePaint(node: SceneNode): boolean {
 
 // --- traversal helpers -----------------------------------------------------
 
+// Cheap probe behind the UI's Color output default: does this selection bind
+// any colour to a variable or a colour style? It answers yes on the first hit
+// rather than resolving names like the pre-scan does, and gives up after a node
+// budget, so it can run on every selection change without costing a full walk.
+export function hasColorTokens(
+  roots: ReadonlyArray<SceneNode>,
+  budget = 2000
+): boolean {
+  let visited = 0
+  const walk = (node: SceneNode, depth: number): boolean => {
+    if (visited++ > budget || depth > 12 || !isVisible(node)) {
+      return false
+    }
+    if ('fills' in node && node.fills !== figma.mixed) {
+      for (const paint of node.fills) {
+        if (paint.type === 'SOLID' && paint.boundVariables?.color !== undefined) {
+          return true
+        }
+      }
+    }
+    if (
+      'fillStyleId' in node &&
+      typeof node.fillStyleId === 'string' &&
+      node.fillStyleId.length > 0
+    ) {
+      return true
+    }
+    for (const child of childrenOf(node)) {
+      if (walk(child, depth + 1)) {
+        return true
+      }
+    }
+    return false
+  }
+  for (const root of roots) {
+    if (walk(root, 0)) {
+      return true
+    }
+  }
+  return false
+}
+
 function isVisible(node: SceneNode): boolean {
   if (node.visible === false) {
     return false
@@ -1624,10 +1753,8 @@ function styledText(node: TextNode): string {
     return cleanText(node.characters)
   }
   const heavy = (segment: { fontName: FontName | symbol }): boolean => {
-    const font = segment.fontName
-    return (
-      typeof font !== 'symbol' &&
-      /bold|semibold|black|heavy/.test(font.style.toLowerCase())
+    return /bold|semibold|black|heavy/.test(
+      normalizedFontStyle(segment.fontName)
     )
   }
   const anyHeavy = segments.some((s) => heavy(s) && s.characters.trim().length > 0)
@@ -1732,7 +1859,13 @@ function groupRows(nodes: ReadonlyArray<SceneNode>): Array<Array<SceneNode>> {
   return rows.map((row) => row.sort((a, b) => geom(a).x - geom(b).x))
 }
 
-async function resolveInstanceNames(root: SceneNode): Promise<Map<string, string>> {
+async function resolveInstanceMetadata(
+  root: SceneNode,
+  componentDepth: number
+): Promise<{
+  instanceNames: Map<string, string>
+  instanceKeys: Map<string, string>
+}> {
   const instances = new Map<string, InstanceNode>()
   const collectIconInstances = (node: SceneNode, depth: number): void => {
     if (depth > 4) {
@@ -1751,32 +1884,60 @@ async function resolveInstanceNames(root: SceneNode): Promise<Map<string, string
       collectIconInstances(child, depth + 1)
     }
   }
-  const walk = (node: SceneNode, depth: number): void => {
-    if (!isVisible(node) || depth > 8) {
+  const walk = (
+    node: SceneNode,
+    treeDepth: number,
+    remainingComponentDepth: number
+  ): void => {
+    if (!isVisible(node) || treeDepth > 12) {
       return
     }
     if (node.type === 'INSTANCE') {
       instances.set(node.id, node)
-      // The emitted component is a boundary. Only icon-sized nested instances
-      // need names for the compact icons summary.
-      collectIconInstances(node, 0)
+      if (remainingComponentDepth > 0) {
+        for (const child of childrenOf(node)) {
+          walk(child, treeDepth + 1, remainingComponentDepth - 1)
+        }
+      } else {
+        // Atomic instances only need names for icon-sized descendants included
+        // in their compact icon summary.
+        collectIconInstances(node, 0)
+      }
       return
     }
     for (const child of childrenOf(node)) {
-      walk(child, depth + 1)
+      walk(child, treeDepth + 1, remainingComponentDepth)
     }
   }
-  walk(root, 0)
+  // The selected root is already the screen boundary, so it never consumes a
+  // component-depth level—even when the root itself is an instance.
+  for (const child of childrenOf(root)) {
+    walk(child, 1, componentDepth)
+  }
 
-  const resolved = await Promise.all(Array.from(instances.values()).map(async (instance) => {
-    const main = await instance.getMainComponentAsync()
-    let name = main === null ? instance.name : main.name
-    if (main !== null && main.parent !== null && main.parent.type === 'COMPONENT_SET') {
-      name = main.parent.name
-    }
-    return [instance.id, cleanText(name)] as const
-  }))
-  return new Map(resolved)
+  const resolved = await Promise.all(
+    Array.from(instances.values()).map(async (instance) => {
+      const main = await instance.getMainComponentAsync()
+      let name = main === null ? instance.name : main.name
+      if (
+        main !== null &&
+        main.parent !== null &&
+        main.parent.type === 'COMPONENT_SET'
+      ) {
+        name = main.parent.name
+      }
+      const cleanName = cleanText(name)
+      return {
+        id: instance.id,
+        name: cleanName,
+        key: main === null ? `name:${cleanName}` : `component:${main.id}`
+      }
+    })
+  )
+  return {
+    instanceNames: new Map(resolved.map(({ id, name }) => [id, name])),
+    instanceKeys: new Map(resolved.map(({ id, key }) => [id, key]))
+  }
 }
 
 // Resolve every bound text-style id under the frame to a role (once, up front).
@@ -1820,7 +1981,7 @@ async function resolveTextStyleRoles(root: SceneNode): Promise<Map<string, Role>
 // Map a named text style to a role by keyword. Order matters: check the more
 // specific names (eyebrow, subhead) before the substrings they contain.
 function roleFromStyleName(name: string): Role | null {
-  const lower = name.toLowerCase()
+  const lower = typeof name === 'string' ? name.toLowerCase() : ''
   if (/eyebrow|overline|kicker/.test(lower)) {
     return 'eyebrow'
   }
@@ -1839,9 +2000,9 @@ function roleFromStyleName(name: string): Role | null {
   return null
 }
 
-function collectMaxTextSize(root: SceneNode): number {
+function collectMaxTextSize(root: SceneNode, componentDepth: number): number {
   let max = 0
-  const walk = (node: SceneNode): void => {
+  const walk = (node: SceneNode, remainingComponentDepth: number): void => {
     if (!isVisible(node)) {
       return
     }
@@ -1850,12 +2011,19 @@ function collectMaxTextSize(root: SceneNode): number {
       return
     }
     if (node.type === 'INSTANCE') {
+      if (remainingComponentDepth > 0) {
+        for (const child of childrenOf(node)) {
+          walk(child, remainingComponentDepth - 1)
+        }
+      }
       return
     }
     for (const child of childrenOf(node)) {
-      walk(child)
+      walk(child, remainingComponentDepth)
     }
   }
-  walk(root)
+  for (const child of childrenOf(root)) {
+    walk(child, componentDepth)
+  }
   return max
 }

@@ -1,4 +1,9 @@
-import { ExtractionProgress, ScreenData, SelectionSummary } from '../types'
+import {
+  ComponentDepth,
+  ExtractionProgress,
+  ScreenData,
+  SelectionSummary
+} from '../types'
 
 export type UiViewState = 'empty' | 'ready' | 'extracting' | 'result' | 'error'
 
@@ -27,7 +32,7 @@ export type UiAction =
 
 export const initialUiModel: UiModel = {
   view: 'empty',
-  selection: { frames: [], ignoredCount: 0 },
+  selection: { frames: [], ignoredCount: 0, hasColorTokens: false },
   extractionSelection: null,
   progress: null,
   screens: [],
@@ -71,7 +76,7 @@ export function reduceUiModel(state: UiModel, action: UiAction): UiModel {
       return {
         ...state,
         view: 'error',
-        error: 'No Markdown was generated. Try another frame or section.'
+        error: 'No Markdown was generated. Try another screen container.'
       }
     }
     return {
@@ -116,28 +121,47 @@ export function deriveUiViewState(input: {
 }
 
 export function isSupportedSelectionType(type: string): boolean {
-  return type === 'FRAME' || type === 'SECTION'
+  return (
+    type === 'FRAME' ||
+    type === 'COMPONENT' ||
+    type === 'COMPONENT_SET' ||
+    type === 'INSTANCE' ||
+    type === 'SECTION'
+  )
 }
 
-export function getUiSize(view: UiViewState, selection: SelectionSummary): UiSize {
-  if (view === 'result') {
-    return { width: 440, height: 580 }
-  }
-  if (view === 'empty' || view === 'extracting') {
-    return { width: 400, height: 348 }
-  }
+// Token names beat raw hex wherever the file actually has them, and beat a
+// column of hex noise where it does not — so the selection picks, and the UI
+// only overrides it once the user touches the control themselves.
+export function defaultColorMode(selection: SelectionSummary): string {
+  return selection.hasColorTokens ? 'Tokens' : 'Off'
+}
 
-  // Sized to the content so the bottom-pinned call to action never leaves a
-  // void: 214 covers the heading, options and button, plus 32 per listed frame.
-  // Overflow and ignored counts share one footer row, so they cost 26 once.
-  const visibleRows = Math.min(selection.frames.length, 3)
-  const hasNote = selection.ignoredCount > 0 || selection.frames.length > 3
-  const readyHeight = Math.max(
-    268,
-    Math.min(440, 214 + visibleRows * 32 + (hasNote ? 26 : 0))
-  )
-  if (view === 'error') {
-    return { width: 400, height: Math.min(500, readyHeight + 62) }
+export function componentDepthFromValue(value: string): ComponentDepth {
+  if (value === '1' || value === '2' || value === '3' || value === '4') {
+    return Number(value) as ComponentDepth
   }
-  return { width: 400, height: readyHeight }
+  return 0
+}
+
+// The Agent Sim designs are a single 512x512 canvas that the three phases morph
+// within, so the window must never resize between them: a resize would cut the
+// card convergence and the code-window expansion in half.
+export const UI_SIZE: UiSize = { width: 512, height: 512 }
+
+// How long `extracting` stays on screen at minimum. The scan is the plugin's
+// explanation of what it is doing, so it gets a floor even when extraction
+// finishes instantly.
+export const MIN_COMPACTING_MS = 2200
+
+// A failure should not sit behind a reassuring scan for the full dwell.
+export const MIN_FAILURE_MS = 700
+
+// How long the merged window takes to grow into the file window. The file
+// content is mounted only once that move is done, so it is never laid out
+// inside a 153px box and then reflowed.
+export const GROW_MS = 1100
+
+export function getUiSize(view: UiViewState, selection: SelectionSummary): UiSize {
+  return UI_SIZE
 }

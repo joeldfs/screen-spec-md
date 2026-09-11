@@ -1,5 +1,7 @@
 // Offline check for the Markdown output (no Figma needed).
 // Run: npx --yes tsx scripts/selftest.ts
+import assert from 'node:assert/strict'
+
 import { buildMarkdown } from '../src/lib/outline'
 import { ScreenData } from '../src/types'
 
@@ -144,4 +146,101 @@ const dense: ScreenData = {
   ]
 }
 
-console.log(buildMarkdown([tempo, list, dense]))
+const baseMarkdown = buildMarkdown([tempo, list, dense])
+assert.equal(baseMarkdown.includes('## Reusable components'), false)
+assert.equal(baseMarkdown.includes('ref: C'), false)
+
+function expandedActionSheet(
+  suffix: string,
+  offsetX: number,
+  title: string
+): Array<ScreenData['elements'][number]> {
+  const actionId = `action-${suffix}`
+  const groupId = `group-${suffix}`
+  const buttonId = `button-${suffix}`
+  return [
+    {
+      role: 'component',
+      component: 'Action Sheet',
+      componentKey: 'component:action-sheet',
+      componentSignature: '[["Mode","VARIANT","Light"]]',
+      expandedComponent: true,
+      props: { Mode: 'Light' },
+      sourceNodeId: actionId,
+      box: { x: offsetX, y: 40, w: 300, h: 296 },
+      layout: { dir: 'col', justify: 'center' },
+      padding: 14
+    },
+    {
+      role: 'group',
+      sourceNodeId: groupId,
+      parentSourceNodeId: actionId,
+      box: { x: offsetX + 15, y: 55, w: 270, h: 105 },
+      layout: { dir: 'col', gap: 10, align: 'center' }
+    },
+    {
+      role: 'body',
+      parentSourceNodeId: groupId,
+      text: title,
+      box: { x: offsetX + 20, y: 60, w: 255, h: 22 }
+    },
+    {
+      role: 'component',
+      component: 'Button',
+      componentKey: 'component:button',
+      componentSignature: '[["Style","VARIANT","Destructive"]]',
+      expandedComponent: true,
+      props: { Style: 'Destructive' },
+      sourceNodeId: buttonId,
+      parentSourceNodeId: actionId,
+      box: { x: offsetX + 20, y: 230, w: 260, h: 48 },
+      layout: { dir: 'row', justify: 'center', align: 'center' }
+    },
+    {
+      role: 'body',
+      parentSourceNodeId: buttonId,
+      text: 'Destructive Action',
+      box: { x: offsetX + 50, y: 244, w: 200, h: 20 }
+    }
+  ]
+}
+
+const reused: Array<ScreenData> = [
+  {
+    index: 1,
+    frameWidth: 405,
+    frameHeight: 476,
+    elements: expandedActionSheet('one', 48, 'A Short Title Is Best')
+  },
+  {
+    index: 2,
+    frameWidth: 405,
+    frameHeight: 476,
+    elements: expandedActionSheet('two', 72, 'A Short Title Is Best')
+  },
+  {
+    index: 3,
+    frameWidth: 405,
+    frameHeight: 476,
+    elements: expandedActionSheet('three', 24, 'A Different Title')
+  }
+]
+const reusedMarkdown = buildMarkdown(reused)
+const outerOnlyMarkdown = buildMarkdown(reused.slice(0, 2))
+assert.match(outerOnlyMarkdown, /  C1:\n    component: Action Sheet/)
+assert.equal(outerOnlyMarkdown.includes('  C2:'), false)
+assert.equal((outerOnlyMarkdown.match(/ref: C1/g) ?? []).length, 2)
+
+assert.match(reusedMarkdown, /## Reusable components/)
+assert.match(reusedMarkdown, /  C1:\n    component: Action Sheet/)
+assert.match(reusedMarkdown, /  C2:\n    component: Button/)
+assert.equal((reusedMarkdown.match(/ref: C1/g) ?? []).length, 2)
+assert.equal((reusedMarkdown.match(/ref: C2/g) ?? []).length, 2)
+assert.match(reusedMarkdown, /box: \[7, 7, 85, 7\], text: A Short Title Is Best/)
+assert.match(
+  reusedMarkdown,
+  /component: Action Sheet, box: \[6, 8, 74, 62\].*A Different Title/s
+)
+
+console.log(baseMarkdown)
+console.log('Markdown self-test passed')
